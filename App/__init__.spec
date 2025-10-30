@@ -1,12 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 
+import os
+
+spec_root = os.path.abspath(SPECPATH)
+
 a = Analysis(
-    ['__init__.py'],
-    pathex=[],
+    ['__init__.py', 'fileSys.py', 'QEHelper.py', 'customElements.py', 'convert.py'],
+    pathex=[spec_root],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=[
+        ('Images', 'Images'),
+        ('pref', 'pref'),
+    ],
+    hiddenimports=[
+        'PIL._tkinter_finder',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -22,17 +31,18 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='__init__',
+    name='Quad-Exporter',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    icon='Images\\Logo.png',
 )

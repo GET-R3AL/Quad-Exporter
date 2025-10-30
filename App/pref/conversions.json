@@ -13,28 +13,28 @@
                ".obj",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".black": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".static": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".fsdbinary": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".json": {
           "Options": [
@@ -48,35 +48,35 @@
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".yaml": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".prs": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".bnk": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".wem": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".jpg": {
           "Options": [
@@ -90,7 +90,7 @@
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".png": {
           "Options": [
@@ -111,28 +111,28 @@
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".py": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".gsf": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".srt": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".pathdata": {
           "Options": [
@@ -146,28 +146,28 @@
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".pickle": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".css": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".tri": {
           "Options": [
                "As Is",
                "Do Not Export"
           ],
-          "State": "Do Not Export"
+          "State": "As Is"
      },
      ".mp4": {
           "Options": [

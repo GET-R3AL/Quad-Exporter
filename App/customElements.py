@@ -60,125 +60,97 @@ class ExportWindow(tk.Frame):
     def __init__(self, root: tk.Tk, **kwargs):
         super(ExportWindow, self).__init__(**kwargs)
         self.root = root
-        self.pack_propagate(False)
-        self.extensionSelection = ttk.Treeview(self, selectmode=tk.BROWSE)
-        self.extensionSelection.pack_propagate(False)
-
-        # Load images.
-        self.imageDict = {}
-        global extensions
-        global icons
-        zipped = zip(extensions[1:-1], icons[1:])
-        zipped = sorted(zipped, key=lambda x: x[1])
-        zipped.insert(0, (extensions[0], icons[0]))
-        for ext, icon in zipped:
-            self.imageDict[ext] = getSVG(os.path.join("Images", "icons", f"{icon}.svg"))
-            # Also load Extension Selection.
-            self.extensionSelection.insert("", "end", text=ext, open=True, image=self.imageDict[ext])
-        self.extensionSelection.heading("#0", text="Export Options")
-        # This is how we update the conversionSettings treeview.
-        self.extensionSelection.selection_set(self.extensionSelection.get_children()[0])
-        self.key = "ALL FILES"
-
-        # Extensions Conversion Window
-        self.extensionConversion = ttk.Treeview(self, selectmode=tk.BROWSE)
-        self.extensionConversion.pack_propagate(False)
+        # Don't use pack_propagate(False) so the frame can size itself to content
+        
         # Load Settings
         self.settingsPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "pref", "conversions.json")
         with open(self.settingsPath, "r") as file:
             self.conversionSettings = json.load(file)
-        self.extensionConversion.heading("#0", text="Export To...")
-        self.updateConversionState(None)
-
-        # Update Bindings.
-        self.extensionSelection.bind("<<TreeviewSelect>>", self.updateConversionView)
-        self.extensionConversion.bind("<<TreeviewSelect>>", self.updateConversionState)
-
-        # Load export options.
-        self.keepHierarchy = tk.BooleanVar(value=True)
-        self.childrenFiles = tk.BooleanVar(value=True)
-        self.childrenDirectories = tk.BooleanVar(value=True)
-        # Botton Frame.
-        self.bottonFrame = ttk.Frame(self)
-
-        # The actual bottons.
-        self.heirBotton = ttk.Checkbutton(self.bottonFrame, text="Keep Folder Hierarchy", variable=self.keepHierarchy, onvalue=True, offvalue=False)
-        self.heirMSG = """
-        If enabled, the hierarchy of the files in the preview to the left will be respected.
-        If a file is in /X/Y/Z/ and you have this enabled, you will export the entire /X/Y/Z chain.
-        If disabled, only the file will be exported (and selected folders).
-        """
-        CreateToolTip(self.heirBotton, text=self.heirMSG)
-
-        self.childFileBotton = ttk.Checkbutton(self.bottonFrame, text="Export Child Files", variable=self.childrenFiles, onvalue=True, offvalue=False)
-        self.childFileMSG = """
-        If enabled, the children files inside of selected folders will be exported.
-        This does not include the children files inside of subdirectories.
-        """
-        CreateToolTip(self.childFileBotton, text=self.childFileMSG)
-
-        self.childDirBotton = ttk.Checkbutton(self.bottonFrame, text="Export Subdirecotries", variable=self.childrenDirectories, onvalue=True, offvalue=False)
-        self.childDirMSG = """
-        If enabled, the subdirectories will be exported.
-        This method is recursive.
-        If you have this enabled, but not "Export Child Files" you will have many empty folders.
-        It is recommended that if you have this enabled, all other options are enabled as well.
-        If the "Keep Folder Hierarchy" is not enabled, you will end up with copies if you have multiple directories selected!
-        """
-        CreateToolTip(self.childDirBotton, text=self.childDirMSG)
-
-        # Pack the frames.
-        self.extensionSelection.grid(column=0, row=0, columnspan=1, rowspan=1, sticky="NESW", padx=5, pady=5)
-        self.extensionConversion.grid(column=1, row=0, columnspan=1, rowspan=1, sticky="NESW", padx=5, pady=5)
-        self.bottonFrame.grid(column=2, row=0, columnspan=1, rowspan=1, sticky="NESW", padx=5, pady=5)
-
-        # Grid configure.
-        self.columnconfigure(0, weight=2)
-        self.columnconfigure(1, weight=1)
-        self.rowconfigure(0, weight=1)
-
-        # TODO: Add more export bottons?
-        self.exportBotton = ttk.Button(self.bottonFrame, text="Export Selected", command=self.export)
-
-        # Pack the buttons in the botton frame.
-        self.heirBotton.grid(column=0, row=0, sticky="W")
-        self.childFileBotton.grid(column=0, row=1, sticky="W")
-        self.childDirBotton.grid(column=0, row=2, sticky="W")
-        self.exportBotton.grid(column=0, row=3, stick="W")
-
-    def updateConversionView(self, event):
-        self.extensionConversion.delete(*self.extensionConversion.get_children())
-        self.key = self.extensionSelection.focus()
-        self.key = self.extensionSelection.item(self.key)
-        self.key = self.key["text"]
-        if self.key == None or len(self.key) == 0:
-            self.key = "ALL FILES"
-        for option in self.conversionSettings[self.key]["Options"]:
-            self.extensionConversion.insert("", "end", text=option)
-        state = self.conversionSettings[self.key]["State"]
-        stateIndex = self.conversionSettings[self.key]["Options"].index(state)
-        self.extensionConversion.selection_set(self.extensionConversion.get_children()[stateIndex])
-
-    def updateConversionState(self, event):
-        state = self.extensionConversion.focus()
-        state = self.extensionConversion.item(state)
-        state = state["text"]
-        # No item selected, read from the saved file.
-        if len(state) == 0:
-            state = self.conversionSettings[self.key]["State"]
-        else:
-            # Error Handling
-            if self.key == ".gr2" and state == ".obj":
-                if platform.system() != "Windows":
-                    warn(self.root, "Exporting .gr2 files to .obj is currently only supported on Windows!")
-                    state = "As Is"
-            # Save the settings into the json file.
-            self.conversionSettings[self.key]["State"] = state
-            with open(self.settingsPath, "w") as file:
-                json.dump(self.conversionSettings, file, indent="     ")
+        
+        # Load saved export destination
+        self.exportDestPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "pref", "exportDest.txt")
+        self.exportDestination = ""
+        try:
+            with open(self.exportDestPath, "r") as file:
+                self.exportDestination = file.readline().strip()
+        except:
+            pass
+        
+        # Main frame with minimum height
+        mainFrame = ttk.Frame(self)
+        mainFrame.pack(fill=tk.BOTH, expand=False, padx=10, pady=10)
+        
+        # Set a minimum height for the export window
+        self.config(height=150)
+        
+        # Export destination section
+        destLabel = ttk.Label(mainFrame, text="Export Destination:", font=("Arial", 10, "bold"))
+        destLabel.grid(column=0, row=0, sticky="W", pady=(0, 5))
+        
+        # Destination path display and browse button
+        destFrame = ttk.Frame(mainFrame)
+        destFrame.grid(column=0, row=1, sticky="EW", pady=(0, 15))
+        destFrame.columnconfigure(0, weight=1)
+        
+        self.destEntry = ttk.Entry(destFrame, width=50)
+        self.destEntry.grid(column=0, row=0, sticky="EW", padx=(0, 5))
+        if self.exportDestination:
+            self.destEntry.insert(0, self.exportDestination)
+        
+        browseBtn = ttk.Button(destFrame, text="Browse...", command=self.browseDestination)
+        browseBtn.grid(column=1, row=0)
+        
+        # Export Settings button
+        settingsBtn = ttk.Button(mainFrame, text="Export Settings", command=self.openExportSettings)
+        settingsBtn.grid(column=0, row=2, sticky="W", pady=(0, 15))
+        
+        # Export button
+        self.exportBtn = ttk.Button(mainFrame, text="Export Selected", command=self.export)
+        self.exportBtn.grid(column=0, row=3, sticky="EW")
+        
+        mainFrame.columnconfigure(0, weight=1)
+    
+    def browseDestination(self):
+        initialdir = self.exportDestination if self.exportDestination and os.path.isdir(self.exportDestination) else "/"
+        output_directory = filedialog.askdirectory(parent=self, initialdir=initialdir, 
+                                                   title="Select export destination", mustexist=True)
+        if output_directory:
+            self.exportDestination = output_directory
+            self.destEntry.delete(0, tk.END)
+            self.destEntry.insert(0, output_directory)
+            # Save the destination
+            try:
+                with open(self.exportDestPath, "w") as file:
+                    file.write(output_directory)
+            except:
+                warn(self.root, "Failed to save export destination path.")
+    
+    def openExportSettings(self):
+        """Open settings window with Conversions tab active."""
+        # Call the settings window with tab parameter
+        SettingsWindow(self.root, self.root.resPath, self.root.indexPath, 
+                      self.root.savePathsCallback, activeTab="Conversions")
 
     def export(self):
-        output_directory = filedialog.askdirectory(parent=self, initialdir="/", title="Please select the export path.", mustexist=True)
+        # Get destination from entry field
+        output_directory = self.destEntry.get().strip()
+        
+        if not output_directory:
+            warn(self.root, "Please select an export destination.")
+            return
+        
+        if not os.path.isdir(output_directory):
+            warn(self.root, "Export destination does not exist. Please select a valid directory.")
+            return
+        
+        # Update saved destination
+        self.exportDestination = output_directory
+        try:
+            with open(self.exportDestPath, "w") as file:
+                file.write(output_directory)
+        except:
+            pass
+        
         # Go through all of the selected items.
         for item in self.root.selected:
             if isinstance(item, FileItem):
@@ -187,23 +159,27 @@ class ExportWindow(tk.Frame):
             else:
                 self.exportFolder(item, output_directory)
 
-
     def exportFile(self, item, output_directory):
         full_item_path = os.path.join(output_directory, item.path)
         # Call our convert.py function to handle file conversion.
         convert(item.truePath, full_item_path, self.conversionSettings, self.root)
 
     def exportFolder(self, item, output_directory):
-        base_path = item.fullPath if self.keepHierarchy.get() else ""
+        # Always use full export (hierarchy + all files + subdirectories)
+        keep_hierarchy = True
+        export_files = True
+        export_subdirs = True
+        
+        base_path = item.fullPath if keep_hierarchy else ""
         
         def recurse(folder: FileDir):
-            if self.childrenFiles.get():
+            if export_files:
                 for child in folder.files:
                     rel_path = os.path.join(base_path, os.path.relpath(child.fullPath, item.fullPath))
                     target_dir = os.path.join(output_directory, rel_path)
                     self.exportFile(child, target_dir)
 
-            if self.childrenDirectories.get():
+            if export_subdirs:
                 for subdir in folder.children:
                     recurse(subdir)
 
@@ -293,7 +269,7 @@ class PreviewWindow(tk.Frame):
 class DirectoryWindow(tk.Frame):
     def __init__(self, root: tk.Tk, **kwargs):
         super(DirectoryWindow, self).__init__(**kwargs)
-        self.configure(width=200)
+        self.configure(padx=5, pady=5)
 
         # Dictionaries
         self.fileDict = {}
@@ -394,3 +370,219 @@ class DirectoryWindow(tk.Frame):
             elif selected in self.fileDict:
                 selectedObjects.append(self.fileDict[selected])
         return selectedObjects
+
+
+class SettingsWindow(tk.Toplevel):
+    """Settings window for managing application preferences."""
+    
+    def __init__(self, root: tk.Tk, resPath: str, indexPath: str, saveCallback, activeTab: str = "Paths"):
+        super(SettingsWindow, self).__init__(root)
+        self.root = root
+        self.saveCallback = saveCallback
+        self.resPath = resPath
+        self.indexPath = indexPath
+        
+        self.title("Settings")
+        self.minsize(650, 500)
+        self.resizable(True, True)
+        
+        # Load conversion settings
+        self.settingsPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "pref", "conversions.json")
+        with open(self.settingsPath, "r") as file:
+            self.conversionSettings = json.load(file)
+        
+        # Create notebook for tabs
+        self.notebook = ttk.Notebook(self)
+        self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        # Create tabs
+        pathsTab = ttk.Frame(self.notebook)
+        conversionsTab = ttk.Frame(self.notebook)
+        
+        self.notebook.add(pathsTab, text="Paths")
+        self.notebook.add(conversionsTab, text="Conversions")
+        
+        # Set active tab after both tabs are created
+        if activeTab == "Conversions":
+            self.notebook.select(conversionsTab)
+        
+        # ===== PATHS TAB =====
+        pathsFrame = ttk.Frame(pathsTab, padding=10)
+        pathsFrame.pack(fill=tk.BOTH, expand=True)
+        
+        # Res Cache Path Section
+        resLabel = ttk.Label(pathsFrame, text="Shared Cache Path (ResFiles):", font=("Arial", 10, "bold"))
+        resLabel.grid(column=0, row=0, sticky="W", pady=(0, 5))
+        
+        self.resPathVar = tk.StringVar(value=self.resPath)
+        resEntry = ttk.Entry(pathsFrame, textvariable=self.resPathVar, width=60)
+        resEntry.grid(column=0, row=1, sticky="EW", padx=(0, 5))
+        
+        resBrowseBtn = ttk.Button(pathsFrame, text="Browse...", command=self.browseResPath)
+        resBrowseBtn.grid(column=1, row=1)
+        
+        # Help text for res cache
+        resCacheHelp = "Default: C:\\Program Files\\EVE\\SharedCache\\ResFiles"
+        resCacheLabel = ttk.Label(pathsFrame, text=resCacheHelp, font=("Arial", 8), foreground="gray")
+        resCacheLabel.grid(column=0, row=2, columnspan=2, sticky="W", pady=(2, 0))
+        
+        # Index Path Section
+        indexLabel = ttk.Label(pathsFrame, text="Res File Index Path:", font=("Arial", 10, "bold"))
+        indexLabel.grid(column=0, row=3, sticky="W", pady=(15, 5))
+        
+        self.indexPathVar = tk.StringVar(value=self.indexPath)
+        indexEntry = ttk.Entry(pathsFrame, textvariable=self.indexPathVar, width=60)
+        indexEntry.grid(column=0, row=4, sticky="EW", padx=(0, 5))
+        
+        indexBrowseBtn = ttk.Button(pathsFrame, text="Browse...", command=self.browseIndexPath)
+        indexBrowseBtn.grid(column=1, row=4)
+        
+        # Help text for index
+        indexHelp = "Default: C:\\Program Files\\EVE\\SharedCache\\tq\\resfileindex.txt"
+        indexLabel = ttk.Label(pathsFrame, text=indexHelp, font=("Arial", 8), foreground="gray")
+        indexLabel.grid(column=0, row=5, columnspan=2, sticky="W", pady=(2, 0))
+        
+        # Grid configuration
+        pathsFrame.columnconfigure(0, weight=1)
+        
+        # ===== CONVERSIONS TAB =====
+        conversionsFrame = ttk.Frame(conversionsTab, padding=10)
+        conversionsFrame.pack(fill=tk.BOTH, expand=True)
+        
+        # Instructions
+        instrLabel = ttk.Label(conversionsFrame, text="File Type Export Settings:", font=("Arial", 10, "bold"))
+        instrLabel.pack(anchor="w", pady=(0, 5))
+        
+        instrText = "Select export behavior for each file type."
+        instrLabel2 = ttk.Label(conversionsFrame, text=instrText, font=("Arial", 9))
+        instrLabel2.pack(anchor="w", pady=(0, 10))
+        
+        # Create canvas with scrollbar for radio buttons
+        canvasFrame = ttk.Frame(conversionsFrame)
+        canvasFrame.pack(fill=tk.BOTH, expand=True)
+        
+        # Scrollbar
+        scrollbar = ttk.Scrollbar(canvasFrame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Canvas for scrolling
+        self.convCanvas = tk.Canvas(canvasFrame, yscrollcommand=scrollbar.set, highlightthickness=0)
+        self.convCanvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=self.convCanvas.yview)
+        
+        # Frame inside canvas
+        self.convScrollFrame = ttk.Frame(self.convCanvas)
+        self.convCanvas.create_window((0, 0), window=self.convScrollFrame, anchor="nw")
+        
+        # Store radio variables
+        self.convRadioVars = {}
+        
+        # Create radio buttons for each file type - one row per file type
+        # Put "ALL FILES" first, then sort the rest
+        row = 0
+        
+        # Sort items but keep "ALL FILES" at the top
+        sortedItems = sorted(self.conversionSettings.items())
+        orderedItems = []
+        
+        # Find and add "ALL FILES" first
+        for item in sortedItems:
+            if item[0] == "ALL FILES":
+                orderedItems.insert(0, item)
+            else:
+                orderedItems.append(item)
+        
+        for fileType, settings in orderedItems:
+            # File type label
+            fileLabel = ttk.Label(self.convScrollFrame, text=fileType, font=("Arial", 9, "bold"))
+            fileLabel.grid(column=0, row=row, sticky="W", pady=2, padx=(5, 15))
+            
+            # Create radio variable
+            radioVar = tk.StringVar(value=settings["State"])
+            self.convRadioVars[fileType] = radioVar
+            
+            # Create radio buttons for each option in the same row
+            col = 1
+            for option in settings["Options"]:
+                rb = ttk.Radiobutton(self.convScrollFrame, text=option, variable=radioVar, value=option,
+                                    command=lambda ft=fileType: self.updateConversionSetting(ft))
+                rb.grid(column=col, row=row, sticky="W", padx=5)
+                col += 1
+            
+            row += 1
+        
+        # Update scroll region
+        self.convScrollFrame.update_idletasks()
+        self.convCanvas.config(scrollregion=self.convCanvas.bbox("all"))
+        
+        # Bind mousewheel only when mouse is over the canvas
+        def on_mousewheel(event):
+            if self.convCanvas.winfo_exists():
+                self.convCanvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        def bind_mousewheel(event):
+            self.convCanvas.bind_all("<MouseWheel>", on_mousewheel)
+        
+        def unbind_mousewheel(event):
+            self.convCanvas.unbind_all("<MouseWheel>")
+        
+        self.convCanvas.bind("<Enter>", bind_mousewheel)
+        self.convCanvas.bind("<Leave>", unbind_mousewheel)
+        
+        # Unbind when window closes
+        self.protocol("WM_DELETE_WINDOW", lambda: [unbind_mousewheel(None), self.destroy()])
+        
+        # ===== BOTTOM BUTTONS =====
+        buttonFrame = ttk.Frame(self, padding=(10, 0, 10, 10))
+        buttonFrame.pack(fill=tk.X)
+        
+        saveBtn = ttk.Button(buttonFrame, text="Save", command=self.save)
+        saveBtn.pack(side=tk.LEFT, padx=5)
+        
+        cancelBtn = ttk.Button(buttonFrame, text="Cancel", command=self.destroy)
+        cancelBtn.pack(side=tk.LEFT, padx=5)
+        
+        # Center the window
+        self.transient(root)
+        self.grab_set()
+    
+    def browseResPath(self):
+        """Open file browser for Res Cache directory."""
+        path = filedialog.askdirectory(
+            parent=self,
+            initialdir=self.resPathVar.get() or "/",
+            title="Please select the cache directory.",
+            mustexist=True
+        )
+        if path:
+            self.resPathVar.set(os.path.realpath(path))
+    
+    def browseIndexPath(self):
+        """Open file browser for Index file."""
+        path = filedialog.askopenfilename(
+            parent=self,
+            initialdir=os.path.dirname(self.indexPathVar.get()) if self.indexPathVar.get() else "/",
+            title="Please select the Res File Index",
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+        )
+        if path:
+            self.indexPathVar.set(os.path.realpath(path))
+    
+    def updateConversionSetting(self, fileType):
+        """Update conversion setting when radio button is changed."""
+        newState = self.convRadioVars[fileType].get()
+        self.conversionSettings[fileType]["State"] = newState
+    
+    def save(self):
+        """Save the settings and close the window."""
+        self.resPath = self.resPathVar.get()
+        self.indexPath = self.indexPathVar.get()
+        
+        # Save conversion settings to file
+        with open(self.settingsPath, "w") as file:
+            json.dump(self.conversionSettings, file, indent="     ")
+        
+        # Save paths
+        self.saveCallback(self.resPath, self.indexPath)
+        self.destroy()

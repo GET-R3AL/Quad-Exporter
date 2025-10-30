@@ -101,16 +101,23 @@ def loadImage(file: str, size: tuple[int, int]):
         return ""
     # Loads the image so we can use it in preview.
     # UTILIZES THE TRUE PATH
-    image = Image.open(file)
-    x, y = image.size
-    targetX, targetY = size
-    ratio = min(targetX/x, targetY/y)
-    image = image.resize((int(x * ratio) - 1, int(y * ratio) - 1), resample=Image.BICUBIC)
-    # Adding transparent background.
-    background = Image.new('RGBA', size, (255, 255, 255, 0))
-    background.paste(image, (int((size[0] - image.size[0]) / 2), int((size[1] - image.size[1]) / 2)))
-    imageTk = ImageTk.PhotoImage(background)
-    return imageTk
+    try:
+        if not os.path.exists(file):
+            print(f"Warning: Image file not found: {file}")
+            return ""
+        image = Image.open(file)
+        x, y = image.size
+        targetX, targetY = size
+        ratio = min(targetX/x, targetY/y)
+        image = image.resize((int(x * ratio) - 1, int(y * ratio) - 1), resample=Image.BICUBIC)
+        # Adding transparent background.
+        background = Image.new('RGBA', size, (255, 255, 255, 0))
+        background.paste(image, (int((size[0] - image.size[0]) / 2), int((size[1] - image.size[1]) / 2)))
+        imageTk = ImageTk.PhotoImage(background)
+        return imageTk
+    except Exception as e:
+        print(f"Error loading image {file}: {e}")
+        return ""
 
 
 def loadText(file: str):

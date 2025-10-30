@@ -22,16 +22,18 @@ def savePaths():
         file.write(indexPath + "\n")
 
 
-def resMenu(root: tk.Tk):
-    global resPath
-    resPath = getCachePopUp(root)
+def savePathsFromSettings(newResPath, newIndexPath):
+    """Callback function for settings window to update paths."""
+    global resPath, indexPath
+    resPath = newResPath
+    indexPath = newIndexPath
     savePaths()
 
 
-def indexMenu(root: tk.Tk):
-    global indexPath
-    indexPath = getIndexPopUp(root)
-    savePaths()
+def openSettingsWindow(root: tk.Tk, activeTab: str = "Paths"):
+    """Open the settings window."""
+    global resPath, indexPath
+    SettingsWindow(root, resPath, indexPath, savePathsFromSettings, activeTab=activeTab)
 
 
 def main():
@@ -54,8 +56,11 @@ def main():
         print(f"Enabled File Types: {enabled}")
     except:
         warn(root, "Cannot open 'enabled' preference file")
+    # Set default paths
+    defaultResPath = r"C:\Program Files\EVE\SharedCache\ResFiles"
+    defaultIndexPath = r"C:\Program Files\EVE\SharedCache\tq\resfileindex.txt"
+    
     try:
-
         with open(savedPaths, "r") as file:
             resPath = file.readline().strip()
             indexPath = file.readline().strip()
@@ -65,10 +70,20 @@ def main():
                 warn(root, "Created new user [empty] preference file.")
         except:
             warn(root, "Cannot create new user preference file.\nWrite privleges may be needed.")
-    # If we don't have a cache path yet, ask to get it.
-    if resPath == "" or not os.path.isdir(resPath):
+    
+    # If we don't have a res cache path yet, use the default
+    if resPath == "":
+        resPath = defaultResPath
+    
+    # If we don't have an index path yet, use the default
+    if indexPath == "":
+        indexPath = defaultIndexPath
+    
+    # If the cache path doesn't exist, ask to get it.
+    if not os.path.isdir(resPath):
         resPath = getCachePopUp(root)
-    if indexPath == "" or not os.path.isfile(indexPath):
+    # If the index path doesn't exist, ask to get it.
+    if not os.path.isfile(indexPath):
         indexPath = getIndexPopUp(root)
     # Save the data.
     savePaths()
@@ -81,38 +96,42 @@ def main():
     print(f"Loaded {rootDir.size} bytes")
     root.rootDir = rootDir
     root.selected = []
+    
+    # Store paths on root for access by ExportWindow
+    root.resPath = resPath
+    root.indexPath = indexPath
+    root.savePathsCallback = savePathsFromSettings
 
-    # Directory Window.
-    dW = DirectoryWindow(root)
-    dW.grid(column=0, row=0, rowspan=2, sticky="NSEW")
+    # Create main horizontal PanedWindow using tk.PanedWindow for better compatibility
+    mainPane = tk.PanedWindow(root, orient=tk.HORIZONTAL, sashwidth=5, sashrelief=tk.RAISED)
+    mainPane.pack(fill=tk.BOTH, expand=True)
+
+    # Directory Window (left pane)
+    dW = DirectoryWindow(root)  # Pass root, not mainPane
     dW.pack_propagate(False)
+    mainPane.add(dW, minsize=200, width=250)
 
-    # Preview Window.
-    pW = PreviewWindow(root)
-    pW.grid(column=1, row=0, sticky="NSEW")
-    pW.pack_propagate(False)
+    # Right side frame
+    rightFrame = tk.Frame(mainPane)
+    
+    # Preview Window (top)
+    pW = PreviewWindow(root)  # Pass root, not rightFrame
+    pW.pack(side=tk.TOP, fill=tk.BOTH, expand=True, in_=rightFrame)
     root.pwUpdate = pW.update
 
-    # Export Window.
-    eW = ExportWindow(root)
-    eW.grid(column=1, row=1, sticky="NSEW")
-    eW.pack_propagate(False)
+    # Export Window (bottom) - smaller since we removed the options panes
+    eW = ExportWindow(root)  # Pass root, not rightFrame
+    eW.pack(side=tk.BOTTOM, fill=tk.X, in_=rightFrame)
 
-    # Root gird configure.
-    root.columnconfigure(0, weight=1)
-    root.columnconfigure(1, weight=5)
-    root.rowconfigure(0, weight=5)
-    root.rowconfigure(1, weight=1)
+    mainPane.add(rightFrame, minsize=400)
 
     # Menu Commands.
     top = root.winfo_toplevel()
     root.menuBar = tk.Menu(top)
     top['menu'] = root.menuBar
 
-    root.subMenu = tk.Menu(root.menuBar)
-    root.menuBar.add_cascade(label='Path Options', menu=root.subMenu)
-    root.subMenu.add_command(label='Select Res Path', command=partial(resMenu, root))
-    root.subMenu.add_command(label='Select Index Path', command=partial(indexMenu, root))
+    # Add Settings directly to menu bar
+    root.menuBar.add_command(label='Settings', command=partial(openSettingsWindow, root))
 
     # Finally call the mainloop.
     root.mainloop()

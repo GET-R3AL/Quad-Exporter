@@ -9,3 +9,4 @@ Temp
 __pycache__
 # This is so I can build the app binary.
 QuadExporter.spec
+Exports/

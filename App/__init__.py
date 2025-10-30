@@ -42,7 +42,7 @@ def main():
     root = tk.Tk()
     root.title("Quad-Exporter")
     root.minsize(800, 600)
-    root.tk.call('tk', 'scaling', 2.0)
+    root.tk.call('tk', 'scaling', 1.3)
     # root.state("zoomed")
     # Load Preferences
     try:

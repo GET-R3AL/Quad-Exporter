@@ -181,9 +181,6 @@ class ExportWindow(tk.Frame):
         output_directory = filedialog.askdirectory(parent=self, initialdir="/", title="Please select the export path.", mustexist=True)
         # Go through all of the selected items.
         for item in self.root.selected:
-            if self.keepHierarchy.get():
-                output_directory = os.path.join(output_directory, item.fullPath)
-            # Save the item.
             if isinstance(item, FileItem):
                 # Add the file.
                 self.exportFile(item, output_directory)
@@ -197,13 +194,22 @@ class ExportWindow(tk.Frame):
         convert(item.truePath, full_item_path, self.conversionSettings, self.root)
 
     def exportFolder(self, item, output_directory):
-        # See if we have to keep going down and exporting the file's children (and/or it's sub0directories).
-        if self.childrenFiles.get():
-            for child in item.files:
-                self.exportFile(child, output_directory)
-        if self.childrenDirectories.get():
-            for child in item.children:
-                self.exportFolder(child, output_directory)
+        base_path = item.fullPath if self.keepHierarchy.get() else ""
+        
+        def recurse(folder: FileDir):
+            if self.childrenFiles.get():
+                for child in folder.files:
+                    rel_path = os.path.join(base_path, os.path.relpath(child.fullPath, item.fullPath))
+                    target_dir = os.path.join(output_directory, rel_path)
+                    self.exportFile(child, target_dir)
+
+            if self.childrenDirectories.get():
+                for subdir in folder.children:
+                    recurse(subdir)
+
+        recurse(item)
+
+
 
 
 class PreviewWindow(tk.Frame):
@@ -285,46 +291,55 @@ class PreviewWindow(tk.Frame):
 
 
 class DirectoryWindow(tk.Frame):
-    # This is the directory window.
-    # TODO:
-    # Get horizontal scrolling working properly...
-    # Add actual scroll bars?
     def __init__(self, root: tk.Tk, **kwargs):
         super(DirectoryWindow, self).__init__(**kwargs)
-        # Min width until I get the horizontal scroll bar working all the way.
         self.configure(width=200)
-        # A dictionary of our files, utilizes the same format that the treeView dictionary is, so we can just access them with the key of our elements.
+
+        # Dictionaries
         self.fileDict = {}
-        # Dictionary of our directories.
         self.dirDict = {}
-        # List of loaded subDirs.
         self.loaded = []
-        # A directory of "empty" files to stand as place holders until we load other files.
         self.emptyDict = {}
-        # Default icon is an alert-icon, please report it if you see it!
         self.imageDict = defaultdict(self.defaultDictValue)
-        # These our all the extensions I currently have icons for, and their matching icons.
-        global extensions
-        global icons
+
+        global extensions, icons
         for ext, icon in zip(extensions, icons):
             self.imageDict[ext] = getSVG(os.path.join("Images", "icons", f"{icon}.svg"))
-        # If you notice file formats I didn't please add them!
-        # Feel free to suggest better icons and stuff too!
+
         self.root = root
         self.rootDir = root.rootDir
-        self.tree = ttk.Treeview(self)
+
+        # Create Treeview
+        self.tree = ttk.Treeview(self, show="tree")
         self.openImg = getSVG(os.path.join("Images", "icons", "folder-open.svg"))
         self.closeImg = getSVG(os.path.join("Images", "icons", "folder.svg"))
         self.errorImg = self.defaultDictValue()
         self.tree.heading('#0', text=self.rootDir.directory, anchor='w')
         self.rootNode = self.tree.insert("", "end", text=self.rootDir.directory, open=True, image=self.openImg)
-        self.tree.pack(expand=True, fill=tk.BOTH)
+
+        # --- Add scrollbars ---
+        yscroll = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        xscroll = ttk.Scrollbar(self, orient="horizontal", command=self.tree.xview)
+        self.tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+
+        # Grid layout
+        self.tree.grid(row=0, column=0, sticky="nsew")
+        yscroll.grid(row=0, column=1, sticky="ns")
+        xscroll.grid(row=1, column=0, sticky="ew")
+
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+        # ----------------------
+
         self.addChildren(self.rootNode, self.rootDir)
         self.addFiles(self.rootNode)
+
+        # Bindings
         self.tree.bind("<<TreeviewOpen>>", self.loadOpen)
         self.tree.bind("<<TreeviewClose>>", self.closeFolder)
         self.tree.bind("<<TreeviewSelect>>", self.updateSelected)
         self.tree.bind("<Double-1>", self.updatePreview)
+
 
     def addChildren(self, parent, parentDir: "FileDir"):
         self.fileDict[parent] = parentDir.files

@@ -63,12 +63,12 @@ class ExportWindow(tk.Frame):
         # Don't use pack_propagate(False) so the frame can size itself to content
         
         # Load Settings
-        self.settingsPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "pref", "conversions.json")
+        self.settingsPath = os.path.join(getBaseDir(), "pref", "conversions.json")
         with open(self.settingsPath, "r") as file:
             self.conversionSettings = json.load(file)
         
         # Load saved export destination
-        self.exportDestPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "pref", "exportDest.txt")
+        self.exportDestPath = os.path.join(getBaseDir(), "pref", "exportDest.txt")
         self.exportDestination = ""
         try:
             with open(self.exportDestPath, "r") as file:
@@ -199,7 +199,7 @@ class PreviewWindow(tk.Frame):
 
     def defaultLabel(self):
         self.mainFrame = ttk.Label(self, text="Preview Window\nDouble Click to Preview Item", anchor=tk.CENTER, compound="top")
-        self.mainFrame.imagePath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "Images", "Logo.png")
+        self.mainFrame.imagePath = os.path.join(getBaseDir(), "Images", "Logo.png")
         self.mainFrame.image = loadImage(self.mainFrame.imagePath, (256, 256))
         self.mainFrame.configure(image=self.mainFrame.image)
         self.mainFrame.pack(padx=5, pady=5, expand=True, fill=tk.BOTH)
@@ -370,6 +370,33 @@ class DirectoryWindow(tk.Frame):
             elif selected in self.fileDict:
                 selectedObjects.append(self.fileDict[selected])
         return selectedObjects
+    
+    def refreshTree(self):
+        """Refresh the directory tree with new data from root.rootDir."""
+        # Clear existing tree
+        self.tree.delete(*self.tree.get_children())
+        
+        # Reset dictionaries
+        self.fileDict = {}
+        self.dirDict = {}
+        self.loaded = []
+        self.emptyDict = {}
+        
+        # Get updated rootDir from root
+        self.rootDir = self.root.rootDir
+        
+        # Update tree heading
+        self.tree.heading('#0', text=self.rootDir.directory, anchor='w')
+        
+        # Recreate root node
+        self.rootNode = self.tree.insert("", "end", text=self.rootDir.directory, open=True, image=self.openImg)
+        
+        # Repopulate tree
+        self.addChildren(self.rootNode, self.rootDir)
+        self.addFiles(self.rootNode)
+        
+        # Clear selection
+        self.root.selected = []
 
 
 class SettingsWindow(tk.Toplevel):
@@ -387,7 +414,7 @@ class SettingsWindow(tk.Toplevel):
         self.resizable(True, True)
         
         # Load conversion settings
-        self.settingsPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "pref", "conversions.json")
+        self.settingsPath = os.path.join(getBaseDir(), "pref", "conversions.json")
         with open(self.settingsPath, "r") as file:
             self.conversionSettings = json.load(file)
         

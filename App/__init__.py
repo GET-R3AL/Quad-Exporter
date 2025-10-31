@@ -1,4 +1,5 @@
 import os
+import sys
 import tkinter as tk
 from tkinter import ttk
 from functools import partial
@@ -14,6 +15,19 @@ savedPaths = ""
 enabled = []
 
 
+def getBaseDir():
+    """Get the base directory for the application.
+    When running as an EXE, this returns the directory containing the EXE.
+    When running as a script, this returns the script directory.
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as compiled EXE
+        return os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        return os.path.dirname(os.path.realpath(__file__))
+
+
 def savePaths():
     global resPath, savedPaths, indexPath
     # Save the data.
@@ -22,24 +36,48 @@ def savePaths():
         file.write(indexPath + "\n")
 
 
-def savePathsFromSettings(newResPath, newIndexPath):
-    """Callback function for settings window to update paths."""
-    global resPath, indexPath
+def savePathsFromSettings(newResPath, newIndexPath, root=None):
+    """Callback function for settings window to update paths and reload data."""
+    global resPath, indexPath, enabled
+    oldResPath = resPath
+    oldIndexPath = indexPath
     resPath = newResPath
     indexPath = newIndexPath
     savePaths()
+    
+    # If paths changed and root window is provided, reload the directory tree
+    if root and (oldResPath != newResPath or oldIndexPath != newIndexPath):
+        try:
+            # Reload the directory tree
+            rootDir = parseIndex(root, indexPath, resPath, enabled)
+            rootDir = rootDir.children[0]
+            rootDir.directory = "ResFiles"
+            print(f"Reloaded {rootDir.size} bytes")
+            root.rootDir = rootDir
+            root.selected = []
+            
+            # Update the directory window if it exists
+            if hasattr(root, 'directoryWindow'):
+                root.directoryWindow.refreshTree()
+        except Exception as e:
+            warn(root, f"Failed to reload cache data:\n{str(e)}")
 
 
 def openSettingsWindow(root: tk.Tk, activeTab: str = "Paths"):
     """Open the settings window."""
     global resPath, indexPath
-    SettingsWindow(root, resPath, indexPath, savePathsFromSettings, activeTab=activeTab)
+    # Create a wrapper function that includes the root parameter
+    def saveCallback(newResPath, newIndexPath):
+        savePathsFromSettings(newResPath, newIndexPath, root)
+    
+    SettingsWindow(root, resPath, indexPath, saveCallback, activeTab=activeTab)
 
 
 def main():
     # Some variables for later
     global resPath, savedPaths, indexPath
-    savedPaths = os.path.join(os.path.dirname(os.path.realpath(__file__)), "pref", "savedPaths.txt")
+    baseDir = getBaseDir()
+    savedPaths = os.path.join(baseDir, "pref", "savedPaths.txt")
     # Create the main window.
     root = tk.Tk()
     root.title("Quad-Exporter")
@@ -48,7 +86,7 @@ def main():
     # root.state("zoomed")
     # Load Preferences
     try:
-        with open(os.path.join(os.path.dirname(os.path.realpath(__file__)), "pref", "enabled.txt")) as file:
+        with open(os.path.join(baseDir, "pref", "enabled.txt")) as file:
             for line in file.readlines():
                 line = line.strip()
                 if len(line) > 0 and line[0] != "#":
@@ -60,16 +98,30 @@ def main():
     defaultResPath = r"C:\Program Files\EVE\SharedCache\ResFiles"
     defaultIndexPath = r"C:\Program Files\EVE\SharedCache\tq\resfileindex.txt"
     
+    # Ensure pref directory exists
+    prefDir = os.path.join(baseDir, "pref")
+    if not os.path.exists(prefDir):
+        try:
+            os.makedirs(prefDir)
+        except:
+            warn(root, "Cannot create preferences directory.\nWrite privileges may be needed.")
+    
+    # Load or create savedPaths.txt
     try:
         with open(savedPaths, "r") as file:
             resPath = file.readline().strip()
             indexPath = file.readline().strip()
     except:
+        # File doesn't exist, create it with default paths
+        resPath = ""
+        indexPath = ""
         try:
             with open(savedPaths, "w") as file:
-                warn(root, "Created new user [empty] preference file.")
+                file.write(defaultResPath + "\n")
+                file.write(defaultIndexPath + "\n")
+            print("Created new preferences file with default paths.")
         except:
-            warn(root, "Cannot create new user preference file.\nWrite privleges may be needed.")
+            warn(root, "Cannot create new user preference file.\nWrite privileges may be needed.")
     
     # If we don't have a res cache path yet, use the default
     if resPath == "":
@@ -79,14 +131,25 @@ def main():
     if indexPath == "":
         indexPath = defaultIndexPath
     
-    # If the cache path doesn't exist, ask to get it.
+    # If the cache path doesn't exist, ask to get it (but don't ask for index)
     if not os.path.isdir(resPath):
         resPath = getCachePopUp(root)
-    # If the index path doesn't exist, ask to get it.
+        if resPath:  # Only update if user selected something
+            savePaths()
+    
+    # If index path doesn't exist, try to derive it from resPath
     if not os.path.isfile(indexPath):
-        indexPath = getIndexPopUp(root)
-    # Save the data.
-    savePaths()
+        # Try to find resfileindex.txt in parent directories
+        possibleIndex = os.path.join(os.path.dirname(resPath), "tq", "resfileindex.txt")
+        if os.path.isfile(possibleIndex):
+            indexPath = possibleIndex
+            savePaths()
+        else:
+            # Use default even if it doesn't exist - user can set it in settings later
+            print(f"Warning: Index file not found at {indexPath}. You can set it in Settings.")
+    else:
+        # Save the data if everything is valid
+        savePaths()
     # Check to see if we can open the folder.
     # Open the index file and create our folder.
     rootDir = parseIndex(root, indexPath, resPath, enabled)
@@ -110,6 +173,7 @@ def main():
     dW = DirectoryWindow(root)  # Pass root, not mainPane
     dW.pack_propagate(False)
     mainPane.add(dW, minsize=200, width=250)
+    root.directoryWindow = dW  # Store reference for refreshing
 
     # Right side frame
     rightFrame = tk.Frame(mainPane)

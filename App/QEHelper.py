@@ -1,4 +1,5 @@
 import os
+import sys
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
@@ -7,6 +8,19 @@ from fileSys import FileDir, FileItem
 
 svg_enabled = False
 pil_enabled = False
+
+
+def getBaseDir():
+    """Get the base directory for the application.
+    When running as an EXE, this returns the directory containing the EXE.
+    When running as a script, this returns the script directory.
+    """
+    if getattr(sys, 'frozen', False):
+        # Running as compiled EXE
+        return os.path.dirname(sys.executable)
+    else:
+        # Running as script
+        return os.path.dirname(os.path.realpath(__file__))
 try:
     from cairosvg import svg2png
     svg_enabled = True
@@ -130,7 +144,7 @@ def getSVG(file: str):
         return ""
     # Gets our SVG, renders it, and returns an image type compatible with Tkinter.
     # Also inverts the colors if we're on darkmode.
-    file = os.path.normpath(os.path.join(os.path.dirname(os.path.realpath(__file__)), file))
+    file = os.path.normpath(os.path.join(getBaseDir(), file))
     image = svg2png(url=file, scale=.75, dpi=250)
     image = Image.open(io.BytesIO(image))
     # Resize by saving a temp image.
@@ -163,7 +177,7 @@ def parseIndex(root: tk.Tk, filePath: str, resPath: str, enabled: list = []):
     bar.pack(padx=10, pady=10)
     if pil_enabled:
         image = tk.Label(pop, text="Quad-Exporter", anchor=tk.CENTER, justify=tk.CENTER, font=("Arial", 30), compound="left")
-        image.imagePath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "Images", "Logo.png")
+        image.imagePath = os.path.join(getBaseDir(), "Images", "Logo.png")
         image.image = loadImage(image.imagePath, (32, 32))
         image.configure(image=image.image)
         image.pack(anchor=tk.CENTER, expand=True, fill=tk.BOTH)

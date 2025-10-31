@@ -1,0 +1,227 @@
+{
+    "paths": {
+        "resPath": "C:\\EVE\\SharedCache\\ResFiles",
+        "indexPath": "C:\\EVE\\SharedCache\\tq\\resfileindex.txt",
+        "exportDest": "C:\\Users\\svenm\\Documents"
+    },
+    "fileTypeVisibility": {
+        ".gr2": true,
+        ".black": true,
+        ".static": true,
+        ".fsdbinary": true,
+        ".json": true,
+        ".xml": true,
+        ".yaml": true,
+        ".prs": true,
+        ".bnk": true,
+        ".wem": true,
+        ".jpg": true,
+        ".dds": true,
+        ".png": true,
+        ".webm": true,
+        ".txt": true,
+        ".py": true,
+        ".gsf": true,
+        ".srt": true,
+        ".pathdata": true,
+        ".region": true,
+        ".pickle": true,
+        ".css": true,
+        ".tri": true,
+        ".mp4": true,
+        ".mp3": true
+    },
+    "conversions": {
+        "ALL FILES": {
+            "Options": [
+                "As Is",
+                "Follow Individual Options",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".gr2": {
+            "Options": [
+                "As Is",
+                ".obj",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".black": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".static": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".fsdbinary": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".json": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".xml": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".yaml": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".prs": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".bnk": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".wem": {
+            "Options": [
+                "As Is",
+                ".wav",
+                ".mp3",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".jpg": {
+            "Options": [
+                "As Is",
+                ".png",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".dds": {
+            "Options": [
+                "As Is",
+                ".png",
+                ".jpg",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".png": {
+            "Options": [
+                "As Is",
+                ".jpg",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".webm": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".txt": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".py": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".gsf": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".srt": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".pathdata": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".region": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".pickle": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".css": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".tri": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".mp4": {
+            "Options": [
+                "As Is",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        },
+        ".mp3": {
+            "Options": [
+                "As Is",
+                ".wav",
+                "Do Not Export"
+            ],
+            "State": "As Is"
+        }
+    }
+}

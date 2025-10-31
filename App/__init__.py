@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 import tkinter as tk
 from tkinter import ttk
 from functools import partial
@@ -28,12 +29,55 @@ def getBaseDir():
         return os.path.dirname(os.path.realpath(__file__))
 
 
+def getPreferenceDir():
+    """Get the directory where preferences should be stored.
+    For EXE: Try app directory first, fallback to user AppData.
+    For script: Use pref subdirectory in app directory.
+    """
+    baseDir = getBaseDir()
+    
+    if getattr(sys, 'frozen', False):
+        # Running as EXE - try app directory first
+        appPrefDir = os.path.join(baseDir, "pref")
+        
+        # Test if we can write to the app directory
+        try:
+            if not os.path.exists(appPrefDir):
+                os.makedirs(appPrefDir)
+            
+            # Test write access
+            testFile = os.path.join(appPrefDir, ".write_test")
+            with open(testFile, "w") as f:
+                f.write("test")
+            os.remove(testFile)
+            
+            # App directory is writable, use it
+            return appPrefDir
+        except (OSError, PermissionError):
+            # App directory not writable, use user AppData
+            userDataDir = os.path.join(os.path.expanduser("~"), "AppData", "Local", "Quad-Exporter")
+            try:
+                if not os.path.exists(userDataDir):
+                    os.makedirs(userDataDir)
+                print(f"Using user data directory for preferences: {userDataDir}")
+                return userDataDir
+            except Exception as e:
+                print(f"Cannot create user data directory: {e}")
+                # Final fallback to app directory even if not writable
+                return appPrefDir
+    else:
+        # Running as script - use app directory
+        return os.path.join(baseDir, "pref")
+
+
 def savePaths():
-    global resPath, savedPaths, indexPath
-    # Save the data.
-    with open(savedPaths, "w") as file:
-        file.write(resPath + "\n")
-        file.write(indexPath + "\n")
+    """Save paths to unified preferences file."""
+    global resPath, indexPath
+    preferences = loadPreferences()
+    if preferences:
+        preferences["paths"]["resPath"] = resPath
+        preferences["paths"]["indexPath"] = indexPath
+        savePreferences(preferences)
 
 
 def savePathsFromSettings(newResPath, newIndexPath, root=None):
@@ -73,69 +117,218 @@ def openSettingsWindow(root: tk.Tk, activeTab: str = "Paths"):
     SettingsWindow(root, resPath, indexPath, saveCallback, activeTab=activeTab)
 
 
+def loadPreferences():
+    """Load preferences from the unified preferences.json file."""
+    prefDir = getPreferenceDir()
+    preferencesPath = os.path.join(prefDir, "preferences.json")
+    
+    if os.path.exists(preferencesPath):
+        try:
+            with open(preferencesPath, "r") as file:
+                return json.load(file)
+        except Exception as e:
+            print(f"Error loading preferences: {e}")
+            return None
+    return None
+
+def savePreferences(preferences):
+    """Save preferences to the unified preferences.json file."""
+    prefDir = getPreferenceDir()
+    preferencesPath = os.path.join(prefDir, "preferences.json")
+    
+    try:
+        with open(preferencesPath, "w") as file:
+            json.dump(preferences, file, indent=4)
+        return True
+    except Exception as e:
+        print(f"Error saving preferences: {e}")
+        return False
+
+def createDefaultPreferences(baseDir):
+    """Create default preference files if they don't exist."""
+    prefDir = getPreferenceDir()
+    
+    # Create pref directory if it doesn't exist
+    if not os.path.exists(prefDir):
+        try:
+            os.makedirs(prefDir)
+            print("Created preferences directory")
+        except Exception as e:
+            print(f"Cannot create preferences directory: {e}")
+            return False
+    
+    # Create unified preferences.json if it doesn't exist
+    preferencesPath = os.path.join(prefDir, "preferences.json")
+    if not os.path.exists(preferencesPath):
+        try:
+            # Try multiple methods to find a good default export path (EXE-friendly)
+            defaultExportPath = None
+            
+            # Method 1: Try USERPROFILE environment variable (most reliable for EXE)
+            user_profile = os.environ.get('USERPROFILE')
+            if user_profile and os.path.isdir(user_profile):
+                docs_path = os.path.join(user_profile, 'Documents')
+                if os.path.isdir(docs_path):
+                    defaultExportPath = docs_path
+            
+            # Method 2: Fallback to expanduser (standard approach)
+            if not defaultExportPath:
+                try:
+                    docs_path = os.path.join(os.path.expanduser("~"), "Documents")
+                    if os.path.isdir(docs_path):
+                        defaultExportPath = docs_path
+                except:
+                    pass
+            
+            # Method 3: Final fallback to application directory
+            if not defaultExportPath:
+                defaultExportPath = baseDir
+                print("Using application directory as export default (could not find Documents folder)")
+            
+            defaultPreferences = {
+                "paths": {
+                    "resPath": "",
+                    "indexPath": "",
+                    "exportDest": defaultExportPath
+                },
+                "fileTypeVisibility": {
+                    ".gr2": True, ".black": True, ".static": True, ".fsdbinary": True,
+                    ".json": True, ".xml": True, ".yaml": True, ".prs": True,
+                    ".bnk": True, ".wem": True, ".jpg": True, ".dds": True,
+                    ".png": True, ".webm": True, ".txt": True, ".py": True,
+                    ".gsf": True, ".srt": True, ".pathdata": True, ".region": True,
+                    ".pickle": True, ".css": True, ".tri": True, ".mp4": True, ".mp3": True
+                },
+                "conversions": {
+                    "ALL FILES": {
+                        "Options": ["As Is", "Follow Individual Options", "Do Not Export"],
+                        "State": "As Is"
+                    },
+                    ".gr2": {
+                        "Options": ["As Is", ".obj", "Do Not Export"],
+                        "State": "As Is"
+                    },
+                    ".black": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".static": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".fsdbinary": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".json": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".xml": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".yaml": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".prs": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".bnk": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".wem": {"Options": ["As Is", ".wav", ".mp3", "Do Not Export"], "State": "As Is"},
+                    ".jpg": {"Options": ["As Is", ".png", "Do Not Export"], "State": "As Is"},
+                    ".dds": {"Options": ["As Is", ".png", ".jpg", "Do Not Export"], "State": "As Is"},
+                    ".png": {"Options": ["As Is", ".jpg", "Do Not Export"], "State": "As Is"},
+                    ".webm": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".txt": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".py": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".gsf": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".srt": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".pathdata": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".region": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".pickle": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".css": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".tri": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".mp4": {"Options": ["As Is", "Do Not Export"], "State": "As Is"},
+                    ".mp3": {"Options": ["As Is", ".wav", "Do Not Export"], "State": "As Is"}
+                }
+            }
+            
+            import json
+            with open(preferencesPath, "w") as file:
+                json.dump(defaultPreferences, file, indent=4)
+            print(f"Created default preferences.json with export path: {defaultExportPath}")
+        except Exception as e:
+            print(f"Cannot create preferences.json: {e}")
+    
+    return True
+
+
 def main():
     # Some variables for later
     global resPath, savedPaths, indexPath
     baseDir = getBaseDir()
-    savedPaths = os.path.join(baseDir, "pref", "savedPaths.txt")
+    prefDir = getPreferenceDir()
+    
+    # Create default preferences first, before creating the main window
+    prefsCreated = createDefaultPreferences(baseDir)
+    
     # Create the main window.
     root = tk.Tk()
     root.title("Quad-Exporter")
     root.minsize(800, 600)
     root.tk.call('tk', 'scaling', 1.3)
     # root.state("zoomed")
-    # Load Preferences
-    try:
-        with open(os.path.join(baseDir, "pref", "enabled.txt")) as file:
-            for line in file.readlines():
-                line = line.strip()
-                if len(line) > 0 and line[0] != "#":
-                    enabled.append(line)
-        print(f"Enabled File Types: {enabled}")
-    except:
-        warn(root, "Cannot open 'enabled' preference file")
-    # Set default paths
-    defaultResPath = r"C:\Program Files\EVE\SharedCache\ResFiles"
-    defaultIndexPath = r"C:\Program Files\EVE\SharedCache\tq\resfileindex.txt"
     
-    # Ensure pref directory exists
-    prefDir = os.path.join(baseDir, "pref")
-    if not os.path.exists(prefDir):
-        try:
-            os.makedirs(prefDir)
-        except:
-            warn(root, "Cannot create preferences directory.\nWrite privileges may be needed.")
+    # Load unified preferences
+    preferences = loadPreferences()
+    if preferences:
+        # Extract file type visibility (enabled files are those with visibility True)
+        fileTypeVisibility = preferences.get("fileTypeVisibility", {})
+        for fileType, visible in fileTypeVisibility.items():
+            if visible:
+                enabled.append(fileType)
+        
+        if enabled:
+            print(f"Visible File Types: {enabled}")
+        else:
+            print("No file types visible (all hidden)")
+        
+        # Store preferences globally for access
+        root.preferences = preferences
+    else:
+        print("Warning: Could not load preferences, using defaults")
+        root.preferences = None
+    # Set default paths - try multiple common EVE installation locations
+    possibleSharedCachePaths = [
+        r"C:\Program Files\EVE\SharedCache",
+        r"C:\EVE\SharedCache"
+    ]
     
-    # Load or create savedPaths.txt
-    try:
-        with open(savedPaths, "r") as file:
-            resPath = file.readline().strip()
-            indexPath = file.readline().strip()
-    except:
-        # File doesn't exist, create it with default paths
-        resPath = ""
-        indexPath = ""
-        try:
-            with open(savedPaths, "w") as file:
-                file.write(defaultResPath + "\n")
-                file.write(defaultIndexPath + "\n")
-            print("Created new preferences file with default paths.")
-        except:
-            warn(root, "Cannot create new user preference file.\nWrite privileges may be needed.")
+    # Server options in order of preference
+    serverOptions = ["tq", "sisi", "thunderdome"]
     
-    # If we don't have a res cache path yet, use the default
-    if resPath == "":
+    # Find the first existing SharedCache path
+    defaultSharedCachePath = possibleSharedCachePaths[0]
+    for path in possibleSharedCachePaths:
+        if os.path.isdir(path):
+            defaultSharedCachePath = path
+            break
+    
+    # Build ResFiles path from SharedCache
+    defaultResPath = os.path.join(defaultSharedCachePath, "ResFiles")
+    
+    # Find the first existing server index file
+    defaultIndexPath = None
+    for server in serverOptions:
+        indexPath = os.path.join(defaultSharedCachePath, server, "resfileindex.txt")
+        if os.path.isfile(indexPath):
+            defaultIndexPath = indexPath
+            break
+    
+    # If no server index found, default to TQ path
+    if not defaultIndexPath:
+        defaultIndexPath = os.path.join(defaultSharedCachePath, "tq", "resfileindex.txt")
+    
+    # Load paths from preferences
+    if preferences and "paths" in preferences:
+        resPath = preferences["paths"].get("resPath", defaultResPath)
+        indexPath = preferences["paths"].get("indexPath", defaultIndexPath)
+    else:
         resPath = defaultResPath
-    
-    # If we don't have an index path yet, use the default
-    if indexPath == "":
         indexPath = defaultIndexPath
     
-    # If the cache path doesn't exist, ask to get it (but don't ask for index)
+    # If paths are empty, use defaults
+    if not resPath:
+        resPath = defaultResPath
+    if not indexPath:
+        indexPath = defaultIndexPath
+    
+    # If the cache path doesn't exist, use default anyway and warn user
     if not os.path.isdir(resPath):
-        resPath = getCachePopUp(root)
-        if resPath:  # Only update if user selected something
-            savePaths()
+        print(f"Warning: Resource path '{resPath}' does not exist. You can set the correct path in Settings.")
+        # Don't show popup - just use the path anyway and let user change it in settings
     
     # If index path doesn't exist, try to derive it from resPath
     if not os.path.isfile(indexPath):
@@ -146,17 +339,32 @@ def main():
             savePaths()
         else:
             # Use default even if it doesn't exist - user can set it in settings later
-            print(f"Warning: Index file not found at {indexPath}. You can set it in Settings.")
+            print(f"Warning: Index file not found at '{indexPath}'. You can set the correct path in Settings.")
+    
+    # Always save paths to ensure file exists with current values
+    savePaths()
+    
+    # Check if we can parse the index file
+    if os.path.isfile(indexPath) and os.path.isdir(resPath):
+        # Both files exist, parse normally
+        try:
+            rootDir = parseIndex(root, indexPath, resPath, enabled)
+            # The first rootDir is a true "root" and is empty, so let's go it its child.
+            rootDir = rootDir.children[0]
+            rootDir.directory = "ResFiles"
+            print(f"Loaded {rootDir.size} bytes")
+        except Exception as e:
+            print(f"Error parsing index file: {e}")
+            # Create empty root directory as fallback
+            rootDir = FileDir(resPath=resPath, enabled=enabled)
+            rootDir.directory = "ResFiles"
+            print("Created empty root directory due to parsing error")
     else:
-        # Save the data if everything is valid
-        savePaths()
-    # Check to see if we can open the folder.
-    # Open the index file and create our folder.
-    rootDir = parseIndex(root, indexPath, resPath, enabled)
-    # The first rootDir is a true "root" and is empty, so let's go it its child.
-    rootDir = rootDir.children[0]
-    rootDir.directory = "ResFiles"
-    print(f"Loaded {rootDir.size} bytes")
+        # Files don't exist, create empty root directory
+        rootDir = FileDir(resPath=resPath, enabled=enabled)
+        rootDir.directory = "ResFiles"
+        print("Created empty root directory - index file or resource path not found")
+    
     root.rootDir = rootDir
     root.selected = []
     
@@ -183,7 +391,7 @@ def main():
     pW.pack(side=tk.TOP, fill=tk.BOTH, expand=True, in_=rightFrame)
     root.pwUpdate = pW.update
 
-    # Export Window (bottom) - smaller since we removed the options panes
+    # Export Window (bottom) with hierarchy options
     eW = ExportWindow(root)  # Pass root, not rightFrame
     eW.pack(side=tk.BOTTOM, fill=tk.X, in_=rightFrame)
 

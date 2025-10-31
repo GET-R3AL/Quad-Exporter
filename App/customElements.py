@@ -10,7 +10,7 @@ import json
 from convert import convert
 import platform
 
-# All extensions
+# All extensions - matches conversions.json
 extensions = ("ALL FILES", ".gr2", ".black", ".static", ".fsdbinary", ".json", ".xml", ".yaml", ".prs", ".bnk", ".wem", ".jpg", ".dds", ".png", ".webm", ".txt", ".py", ".gsf", ".srt", ".pathdata", ".region", ".pickle", ".css", ".tri", ".mp4", ".mp3")
 icons = ("files", "box", "file-digit", "file-digit", "file-digit", "file-code", "file-code", "file-code", "file-input", "music", "music", "image", "image", "image", "youtube", "file-text", "file-code", "file-code", "message-circle", "map", "map", "file-digit", "file-code", "box", "youtube", "music")
 
@@ -62,19 +62,15 @@ class ExportWindow(tk.Frame):
         self.root = root
         # Don't use pack_propagate(False) so the frame can size itself to content
         
-        # Load Settings
-        self.settingsPath = os.path.join(getBaseDir(), "pref", "conversions.json")
-        with open(self.settingsPath, "r") as file:
-            self.conversionSettings = json.load(file)
-        
-        # Load saved export destination
-        self.exportDestPath = os.path.join(getBaseDir(), "pref", "exportDest.txt")
-        self.exportDestination = ""
-        try:
-            with open(self.exportDestPath, "r") as file:
-                self.exportDestination = file.readline().strip()
-        except:
-            pass
+        # Load Settings from unified preferences
+        from __init__ import loadPreferences
+        self.preferences = loadPreferences()
+        if self.preferences:
+            self.conversionSettings = self.preferences.get("conversions", {})
+            self.exportDestination = self.preferences.get("paths", {}).get("exportDest", "")
+        else:
+            self.conversionSettings = {}
+            self.exportDestination = ""
         
         # Main frame with minimum height
         mainFrame = ttk.Frame(self)
@@ -100,15 +96,46 @@ class ExportWindow(tk.Frame):
         browseBtn = ttk.Button(destFrame, text="Browse...", command=self.browseDestination)
         browseBtn.grid(column=1, row=0)
         
+        # Export Options section
+        optionsLabel = ttk.Label(mainFrame, text="Export Options:", font=("Arial", 10, "bold"))
+        optionsLabel.grid(column=0, row=2, sticky="W", pady=(0, 5))
+        
+        # Options frame
+        optionsFrame = ttk.Frame(mainFrame)
+        optionsFrame.grid(column=0, row=3, sticky="EW", pady=(0, 15))
+        
+        # Checkbox variables
+        self.keepHierarchy = tk.BooleanVar(value=True)
+        self.exportFiles = tk.BooleanVar(value=True)
+        self.exportSubdirs = tk.BooleanVar(value=True)
+        
+        # Checkboxes
+        hierarchyCheck = ttk.Checkbutton(optionsFrame, text="Keep folder hierarchy", variable=self.keepHierarchy)
+        hierarchyCheck.grid(column=0, row=0, sticky="W", padx=(0, 15))
+        
+        filesCheck = ttk.Checkbutton(optionsFrame, text="Export files", variable=self.exportFiles)
+        filesCheck.grid(column=1, row=0, sticky="W", padx=(0, 15))
+        
+        subdirsCheck = ttk.Checkbutton(optionsFrame, text="Export subdirectories", variable=self.exportSubdirs)
+        subdirsCheck.grid(column=2, row=0, sticky="W")
+        
         # Export Settings button
         settingsBtn = ttk.Button(mainFrame, text="Export Settings", command=self.openExportSettings)
-        settingsBtn.grid(column=0, row=2, sticky="W", pady=(0, 15))
+        settingsBtn.grid(column=0, row=4, sticky="W", pady=(0, 15))
         
         # Export button
         self.exportBtn = ttk.Button(mainFrame, text="Export Selected", command=self.export)
-        self.exportBtn.grid(column=0, row=3, sticky="EW")
+        self.exportBtn.grid(column=0, row=5, sticky="EW")
         
         mainFrame.columnconfigure(0, weight=1)
+    
+    def _saveExportDestination(self, path):
+        """Save export destination to unified preferences."""
+        from __init__ import loadPreferences, savePreferences
+        preferences = loadPreferences()
+        if preferences:
+            preferences["paths"]["exportDest"] = path
+            savePreferences(preferences)
     
     def browseDestination(self):
         initialdir = self.exportDestination if self.exportDestination and os.path.isdir(self.exportDestination) else "/"
@@ -118,12 +145,9 @@ class ExportWindow(tk.Frame):
             self.exportDestination = output_directory
             self.destEntry.delete(0, tk.END)
             self.destEntry.insert(0, output_directory)
-            # Save the destination
-            try:
-                with open(self.exportDestPath, "w") as file:
-                    file.write(output_directory)
-            except:
-                warn(self.root, "Failed to save export destination path.")
+            # Save the destination to unified preferences
+            self.exportDestination = output_directory
+            self._saveExportDestination(output_directory)
     
     def openExportSettings(self):
         """Open settings window with Conversions tab active."""
@@ -145,11 +169,7 @@ class ExportWindow(tk.Frame):
         
         # Update saved destination
         self.exportDestination = output_directory
-        try:
-            with open(self.exportDestPath, "w") as file:
-                file.write(output_directory)
-        except:
-            pass
+        self._saveExportDestination(output_directory)
         
         # Go through all of the selected items.
         for item in self.root.selected:
@@ -165,10 +185,10 @@ class ExportWindow(tk.Frame):
         convert(item.truePath, full_item_path, self.conversionSettings, self.root)
 
     def exportFolder(self, item, output_directory):
-        # Always use full export (hierarchy + all files + subdirectories)
-        keep_hierarchy = True
-        export_files = True
-        export_subdirs = True
+        # Get export options from checkboxes
+        keep_hierarchy = self.keepHierarchy.get()
+        export_files = self.exportFiles.get()
+        export_subdirs = self.exportSubdirs.get()
         
         base_path = item.fullPath if keep_hierarchy else ""
         
@@ -413,10 +433,15 @@ class SettingsWindow(tk.Toplevel):
         self.minsize(650, 500)
         self.resizable(True, True)
         
-        # Load conversion settings
-        self.settingsPath = os.path.join(getBaseDir(), "pref", "conversions.json")
-        with open(self.settingsPath, "r") as file:
-            self.conversionSettings = json.load(file)
+        # Load unified preferences
+        from __init__ import loadPreferences
+        self.preferences = loadPreferences()
+        if self.preferences:
+            self.conversionSettings = self.preferences.get("conversions", {})
+            self.fileTypeVisibility = self.preferences.get("fileTypeVisibility", {})
+        else:
+            self.conversionSettings = {}
+            self.fileTypeVisibility = {}
         
         # Create notebook for tabs
         self.notebook = ttk.Notebook(self)
@@ -424,53 +449,163 @@ class SettingsWindow(tk.Toplevel):
         
         # Create tabs
         pathsTab = ttk.Frame(self.notebook)
+        visibilityTab = ttk.Frame(self.notebook)
         conversionsTab = ttk.Frame(self.notebook)
         
         self.notebook.add(pathsTab, text="Paths")
+        self.notebook.add(visibilityTab, text="File Type Visibility")
         self.notebook.add(conversionsTab, text="Conversions")
         
-        # Set active tab after both tabs are created
+        # Set active tab after all tabs are created
         if activeTab == "Conversions":
             self.notebook.select(conversionsTab)
+        elif activeTab == "Visibility":
+            self.notebook.select(visibilityTab)
         
         # ===== PATHS TAB =====
         pathsFrame = ttk.Frame(pathsTab, padding=10)
         pathsFrame.pack(fill=tk.BOTH, expand=True)
         
-        # Res Cache Path Section
-        resLabel = ttk.Label(pathsFrame, text="Shared Cache Path (ResFiles):", font=("Arial", 10, "bold"))
-        resLabel.grid(column=0, row=0, sticky="W", pady=(0, 5))
+        # SharedCache Root Path Section
+        sharedCacheLabel = ttk.Label(pathsFrame, text="EVE SharedCache Directory (select the 'SharedCache' folder):", font=("Arial", 10, "bold"))
+        sharedCacheLabel.grid(column=0, row=0, sticky="W", pady=(0, 5))
+
+        # Store the SharedCache root path instead of ResFiles path
+        self.sharedCachePathVar = tk.StringVar(value=self.getSharedCacheFromResPath(self.resPath))
+        sharedCacheEntry = ttk.Entry(pathsFrame, textvariable=self.sharedCachePathVar, width=60)
+        sharedCacheEntry.grid(column=0, row=1, sticky="EW", padx=(0, 5))
+
+        sharedCacheBrowseBtn = ttk.Button(pathsFrame, text="Browse...", command=self.browseSharedCachePath)
+        sharedCacheBrowseBtn.grid(column=1, row=1)
+
+        # Help text for SharedCache
+        sharedCacheHelp = "Usually here: C:\\Program Files\\EVE\\SharedCache\n         or: C:\\EVE\\SharedCache"
+        sharedCacheHelpLabel = ttk.Label(pathsFrame, text=sharedCacheHelp, font=("Arial", 8), foreground="gray")
+        sharedCacheHelpLabel.grid(column=0, row=2, columnspan=2, sticky="W", pady=(2, 0))
+
+        # Server Selection Section
+        serverLabel = ttk.Label(pathsFrame, text="EVE Server Selection:", font=("Arial", 10, "bold"))
+        serverLabel.grid(column=0, row=3, sticky="W", pady=(15, 5))
+
+        # Server radio buttons
+        self.serverVar = tk.StringVar(value=self.getServerFromIndexPath(self.indexPath))
+        serverFrame = ttk.Frame(pathsFrame)
+        serverFrame.grid(column=0, row=4, columnspan=2, sticky="W", pady=(0, 5))
+        
+        tqRadio = ttk.Radiobutton(serverFrame, text="Tranquility (TQ)", variable=self.serverVar, value="tq", command=self.updatePathsFromSelection)
+        tqRadio.pack(side=tk.LEFT, padx=(0, 15))
+        
+        sisiRadio = ttk.Radiobutton(serverFrame, text="Singularity (Sisi)", variable=self.serverVar, value="sisi", command=self.updatePathsFromSelection)
+        sisiRadio.pack(side=tk.LEFT, padx=(0, 15))
+        
+        thunderdomeRadio = ttk.Radiobutton(serverFrame, text="Thunderdome", variable=self.serverVar, value="thunderdome", command=self.updatePathsFromSelection)
+        thunderdomeRadio.pack(side=tk.LEFT)
+
+        # Auto-detected paths display (read-only)
+        autoPathsLabel = ttk.Label(pathsFrame, text="Auto-detected paths:", font=("Arial", 9, "bold"))
+        autoPathsLabel.grid(column=0, row=5, sticky="W", pady=(15, 5))
+
+        # ResFiles path display
+        resFilesDisplayLabel = ttk.Label(pathsFrame, text="ResFiles Path:", font=("Arial", 8))
+        resFilesDisplayLabel.grid(column=0, row=6, sticky="W", pady=(2, 0))
         
         self.resPathVar = tk.StringVar(value=self.resPath)
-        resEntry = ttk.Entry(pathsFrame, textvariable=self.resPathVar, width=60)
-        resEntry.grid(column=0, row=1, sticky="EW", padx=(0, 5))
-        
-        resBrowseBtn = ttk.Button(pathsFrame, text="Browse...", command=self.browseResPath)
-        resBrowseBtn.grid(column=1, row=1)
-        
-        # Help text for res cache
-        resCacheHelp = "Default: C:\\Program Files\\EVE\\SharedCache\\ResFiles"
-        resCacheLabel = ttk.Label(pathsFrame, text=resCacheHelp, font=("Arial", 8), foreground="gray")
-        resCacheLabel.grid(column=0, row=2, columnspan=2, sticky="W", pady=(2, 0))
-        
-        # Index Path Section
-        indexLabel = ttk.Label(pathsFrame, text="Res File Index Path:", font=("Arial", 10, "bold"))
-        indexLabel.grid(column=0, row=3, sticky="W", pady=(15, 5))
+        resPathDisplay = ttk.Entry(pathsFrame, textvariable=self.resPathVar, width=60, state='readonly')
+        resPathDisplay.grid(column=0, row=7, sticky="EW", padx=(0, 5), pady=(0, 5))
+
+        # Index path display
+        indexDisplayLabel = ttk.Label(pathsFrame, text="Index File Path:", font=("Arial", 8))
+        indexDisplayLabel.grid(column=0, row=8, sticky="W", pady=(2, 0))
         
         self.indexPathVar = tk.StringVar(value=self.indexPath)
-        indexEntry = ttk.Entry(pathsFrame, textvariable=self.indexPathVar, width=60)
-        indexEntry.grid(column=0, row=4, sticky="EW", padx=(0, 5))
-        
-        indexBrowseBtn = ttk.Button(pathsFrame, text="Browse...", command=self.browseIndexPath)
-        indexBrowseBtn.grid(column=1, row=4)
-        
-        # Help text for index
-        indexHelp = "Default: C:\\Program Files\\EVE\\SharedCache\\tq\\resfileindex.txt"
-        indexLabel = ttk.Label(pathsFrame, text=indexHelp, font=("Arial", 8), foreground="gray")
-        indexLabel.grid(column=0, row=5, columnspan=2, sticky="W", pady=(2, 0))
-        
+        indexPathDisplay = ttk.Entry(pathsFrame, textvariable=self.indexPathVar, width=60, state='readonly')
+        indexPathDisplay.grid(column=0, row=9, sticky="EW", padx=(0, 5))
+
         # Grid configuration
         pathsFrame.columnconfigure(0, weight=1)
+        
+        # Initialize paths based on current selection
+        self.updatePathsFromSelection()
+        
+        # ===== FILE TYPE VISIBILITY TAB =====
+        visibilityFrame = ttk.Frame(visibilityTab, padding=10)
+        visibilityFrame.pack(fill=tk.BOTH, expand=True)
+        
+        # Instructions
+        visInstrLabel = ttk.Label(visibilityFrame, text="Show/Hide File Types in Tree:", font=("Arial", 10, "bold"))
+        visInstrLabel.pack(anchor="w", pady=(0, 5))
+        
+        visInstrText = "Select which file types to show in the directory tree. Folders containing only hidden file types will also be hidden."
+        visInstrLabel2 = ttk.Label(visibilityFrame, text=visInstrText, font=("Arial", 9))
+        visInstrLabel2.pack(anchor="w", pady=(0, 10))
+        
+        # Buttons for Show All / Hide All
+        buttonFrame = ttk.Frame(visibilityFrame)
+        buttonFrame.pack(anchor="w", pady=(0, 10))
+        
+        showAllBtn = ttk.Button(buttonFrame, text="Show All", command=self.showAllFileTypes)
+        showAllBtn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        hideAllBtn = ttk.Button(buttonFrame, text="Hide All", command=self.hideAllFileTypes)
+        hideAllBtn.pack(side=tk.LEFT)
+        
+        # Create canvas with scrollbar for checkboxes
+        visCanvasFrame = ttk.Frame(visibilityFrame)
+        visCanvasFrame.pack(fill=tk.BOTH, expand=True)
+        
+        # Scrollbar
+        visScrollbar = ttk.Scrollbar(visCanvasFrame)
+        visScrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Canvas for scrolling
+        self.visCanvas = tk.Canvas(visCanvasFrame, yscrollcommand=visScrollbar.set, highlightthickness=0)
+        self.visCanvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        visScrollbar.config(command=self.visCanvas.yview)
+        
+        # Frame inside canvas
+        self.visScrollFrame = ttk.Frame(self.visCanvas)
+        self.visCanvas.create_window((0, 0), window=self.visScrollFrame, anchor="nw")
+        
+        # Store checkbox variables
+        self.visibilityVars = {}
+        
+        # Create checkboxes for each file type
+        row = 0
+        col = 0
+        maxCols = 4  # Number of columns for checkbox layout
+        
+        # Sort file types alphabetically
+        sortedFileTypes = sorted(self.fileTypeVisibility.keys())
+        
+        for fileType in sortedFileTypes:
+            var = tk.BooleanVar(value=self.fileTypeVisibility[fileType])
+            self.visibilityVars[fileType] = var
+            
+            cb = ttk.Checkbutton(self.visScrollFrame, text=fileType, variable=var)
+            cb.grid(column=col, row=row, sticky="W", padx=10, pady=2)
+            
+            col += 1
+            if col >= maxCols:
+                col = 0
+                row += 1
+        
+        # Update scroll region
+        self.visScrollFrame.update_idletasks()
+        self.visCanvas.config(scrollregion=self.visCanvas.bbox("all"))
+        
+        # Bind mousewheel
+        def on_vis_mousewheel(event):
+            if self.visCanvas.winfo_exists():
+                self.visCanvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        def bind_vis_mousewheel(event):
+            self.visCanvas.bind_all("<MouseWheel>", on_vis_mousewheel)
+        
+        def unbind_vis_mousewheel(event):
+            self.visCanvas.unbind_all("<MouseWheel>")
+        
+        self.visCanvas.bind("<Enter>", bind_vis_mousewheel)
+        self.visCanvas.bind("<Leave>", unbind_vis_mousewheel)
         
         # ===== CONVERSIONS TAB =====
         conversionsFrame = ttk.Frame(conversionsTab, padding=10)
@@ -573,28 +708,77 @@ class SettingsWindow(tk.Toplevel):
         self.transient(root)
         self.grab_set()
     
-    def browseResPath(self):
-        """Open file browser for Res Cache directory."""
+    def getSharedCacheFromResPath(self, resPath):
+        """Extract SharedCache path from ResFiles path."""
+        if resPath and "SharedCache" in resPath:
+            # Find SharedCache in the path and get everything up to and including it
+            sharedCacheIndex = resPath.find("SharedCache")
+            if sharedCacheIndex != -1:
+                return resPath[:sharedCacheIndex + len("SharedCache")]
+        return ""
+    
+    def getServerFromIndexPath(self, indexPath):
+        """Extract server type from index path."""
+        if indexPath:
+            if "\\tq\\" in indexPath or "/tq/" in indexPath:
+                return "tq"
+            elif "\\sisi\\" in indexPath or "/sisi/" in indexPath:
+                return "sisi"
+            elif "\\thunderdome\\" in indexPath or "/thunderdome/" in indexPath:
+                return "thunderdome"
+        return "tq"  # Default to TQ
+    
+    def updatePathsFromSelection(self):
+        """Update ResFiles and Index paths based on SharedCache path and server selection."""
+        sharedCachePath = self.sharedCachePathVar.get()
+        server = self.serverVar.get()
+        
+        if sharedCachePath:
+            # Update ResFiles path
+            resFilesPath = os.path.join(sharedCachePath, "ResFiles")
+            self.resPathVar.set(resFilesPath)
+            
+            # Update Index path
+            indexPath = os.path.join(sharedCachePath, server, "resfileindex.txt")
+            self.indexPathVar.set(indexPath)
+            
+            # Validate paths and show status
+            self.validatePaths()
+
+    def validatePaths(self):
+        """Validate that the generated paths exist and show status."""
+        resPath = self.resPathVar.get()
+        indexPath = self.indexPathVar.get()
+        
+        # Check if paths exist (this could be used for UI feedback in the future)
+        resExists = os.path.isdir(resPath) if resPath else False
+        indexExists = os.path.isfile(indexPath) if indexPath else False
+        
+        # For now, just ensure the paths are set
+        # Future enhancement: could add status labels to show validation results
+        return resExists and indexExists
+
+    def browseSharedCachePath(self):
+        """Open file browser for SharedCache directory."""
         path = filedialog.askdirectory(
             parent=self,
-            initialdir=self.resPathVar.get() or "/",
-            title="Please select the cache directory.",
+            initialdir=self.sharedCachePathVar.get() or "/",
+            title="Please select the EVE SharedCache directory.",
             mustexist=True
         )
         if path:
-            self.resPathVar.set(os.path.realpath(path))
+            self.sharedCachePathVar.set(os.path.realpath(path))
+            self.updatePathsFromSelection()
+
+    def showAllFileTypes(self):
+        """Show all file types."""
+        for var in self.visibilityVars.values():
+            var.set(True)
     
-    def browseIndexPath(self):
-        """Open file browser for Index file."""
-        path = filedialog.askopenfilename(
-            parent=self,
-            initialdir=os.path.dirname(self.indexPathVar.get()) if self.indexPathVar.get() else "/",
-            title="Please select the Res File Index",
-            defaultextension=".txt",
-            filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
-        )
-        if path:
-            self.indexPathVar.set(os.path.realpath(path))
+    def hideAllFileTypes(self):
+        """Hide all file types."""
+        for var in self.visibilityVars.values():
+            var.set(False)
     
     def updateConversionSetting(self, fileType):
         """Update conversion setting when radio button is changed."""
@@ -603,13 +787,23 @@ class SettingsWindow(tk.Toplevel):
     
     def save(self):
         """Save the settings and close the window."""
+        from __init__ import savePreferences
+        
         self.resPath = self.resPathVar.get()
         self.indexPath = self.indexPathVar.get()
         
-        # Save conversion settings to file
-        with open(self.settingsPath, "w") as file:
-            json.dump(self.conversionSettings, file, indent="     ")
+        # Update preferences with all settings
+        self.preferences["paths"]["resPath"] = self.resPath
+        self.preferences["paths"]["indexPath"] = self.indexPath
+        self.preferences["conversions"] = self.conversionSettings
         
-        # Save paths
-        self.saveCallback(self.resPath, self.indexPath)
+        # Update file type visibility from checkboxes
+        for fileType, var in self.visibilityVars.items():
+            self.preferences["fileTypeVisibility"][fileType] = var.get()
+        
+        # Save to unified preferences file
+        savePreferences(self.preferences)
+        
+        # Call the callback for path updates (triggers reload if needed)
+        self.saveCallback(self.resPath, self.indexPath, self.root)
         self.destroy()

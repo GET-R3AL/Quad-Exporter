@@ -144,6 +144,70 @@ def savePreferences(preferences):
         print(f"Error saving preferences: {e}")
         return False
 
+
+def findCacheDirectory(startPath):
+    """Find a valid cache directory containing ResFiles and tq folders.
+    
+    Args:
+        startPath: Directory to start searching from
+        
+    Returns:
+        Path to cache directory, or None if not found
+    """
+    if not os.path.exists(startPath):
+        return None
+    
+    # Check if this directory has both ResFiles and tq (or sisi or thunderdome)
+    resFilesPath = os.path.join(startPath, "ResFiles")
+    hasTq = os.path.isdir(os.path.join(startPath, "tq"))
+    hasSisi = os.path.isdir(os.path.join(startPath, "sisi"))
+    hasThunderdome = os.path.isdir(os.path.join(startPath, "thunderdome"))
+    
+    if os.path.isdir(resFilesPath) and (hasTq or hasSisi or hasThunderdome):
+        return startPath
+    
+    # Search subdirectories one level deep for cache-like folders
+    try:
+        for item in os.listdir(startPath):
+            itemPath = os.path.join(startPath, item)
+            if os.path.isdir(itemPath):
+                resFilesPath = os.path.join(itemPath, "ResFiles")
+                hasTq = os.path.isdir(os.path.join(itemPath, "tq"))
+                hasSisi = os.path.isdir(os.path.join(itemPath, "sisi"))
+                hasThunderdome = os.path.isdir(os.path.join(itemPath, "thunderdome"))
+                if os.path.isdir(resFilesPath) and (hasTq or hasSisi or hasThunderdome):
+                    return itemPath
+    except (OSError, PermissionError):
+        pass
+    
+    return None
+
+
+def findIndexFile(cacheDir):
+    """Find the resfileindex.txt file in cache directory.
+    
+    Checks for server folders in order: tq, sisi, thunderdome
+    
+    Args:
+        cacheDir: Path to cache directory
+        
+    Returns:
+        Path to resfileindex.txt, or None if not found
+    """
+    if not cacheDir or not os.path.exists(cacheDir):
+        return None
+    
+    # Server options in order of preference
+    serverOptions = ["tq", "sisi", "thunderdome"]
+    
+    for server in serverOptions:
+        indexPath = os.path.join(cacheDir, server, "resfileindex.txt")
+        if os.path.isfile(indexPath):
+            return indexPath
+    
+    return None
+
+
 def createDefaultPreferences(baseDir):
     """Create default preference files if they don't exist."""
     prefDir = getPreferenceDir()
@@ -281,35 +345,36 @@ def main():
         print("Warning: Could not load preferences, using defaults")
         root.preferences = None
     # Set default paths - try multiple common EVE installation locations
-    possibleSharedCachePaths = [
-        r"C:\Program Files\EVE\SharedCache",
-        r"C:\EVE\SharedCache"
+    possibleEvePaths = [
+        r"C:\Program Files\EVE",
+        r"C:\EVE",
+        r"C:\Program Files (x86)\EVE"
     ]
     
-    # Server options in order of preference
-    serverOptions = ["tq", "sisi", "thunderdome"]
+    # Find the first valid cache directory
+    defaultCachePath = None
+    for evePath in possibleEvePaths:
+        if os.path.isdir(evePath):
+            # Look for a cache-like folder (has ResFiles and tq/sisi/thunderdome)
+            cacheDir = findCacheDirectory(evePath)
+            if cacheDir:
+                defaultCachePath = cacheDir
+                print(f"Found cache directory: {cacheDir}")
+                break
     
-    # Find the first existing SharedCache path
-    defaultSharedCachePath = possibleSharedCachePaths[0]
-    for path in possibleSharedCachePaths:
-        if os.path.isdir(path):
-            defaultSharedCachePath = path
-            break
+    # If no cache found, default to a path anyway
+    if not defaultCachePath:
+        defaultCachePath = r"C:\Program Files\EVE\SharedCache"
     
-    # Build ResFiles path from SharedCache
-    defaultResPath = os.path.join(defaultSharedCachePath, "ResFiles")
+    # Build default ResFiles path
+    defaultResPath = os.path.join(defaultCachePath, "ResFiles")
     
-    # Find the first existing server index file
-    defaultIndexPath = None
-    for server in serverOptions:
-        indexPath = os.path.join(defaultSharedCachePath, server, "resfileindex.txt")
-        if os.path.isfile(indexPath):
-            defaultIndexPath = indexPath
-            break
+    # Find index file in the cache directory
+    defaultIndexPath = findIndexFile(defaultCachePath)
     
-    # If no server index found, default to TQ path
+    # If no index found, default to TQ path
     if not defaultIndexPath:
-        defaultIndexPath = os.path.join(defaultSharedCachePath, "tq", "resfileindex.txt")
+        defaultIndexPath = os.path.join(defaultCachePath, "tq", "resfileindex.txt")
     
     # Load paths from preferences
     if preferences and "paths" in preferences:
@@ -330,12 +395,19 @@ def main():
         print(f"Warning: Resource path '{resPath}' does not exist. You can set the correct path in Settings.")
         # Don't show popup - just use the path anyway and let user change it in settings
     
-    # If index path doesn't exist, try to derive it from resPath
+    # If index path doesn't exist, try to find it automatically
     if not os.path.isfile(indexPath):
-        # Try to find resfileindex.txt in parent directories
-        possibleIndex = os.path.join(os.path.dirname(resPath), "tq", "resfileindex.txt")
-        if os.path.isfile(possibleIndex):
-            indexPath = possibleIndex
+        # Get the cache directory (parent of ResFiles)
+        if resPath.endswith("ResFiles"):
+            cacheDir = os.path.dirname(resPath)
+        else:
+            cacheDir = resPath
+        
+        # Use helper function to find index file
+        foundIndex = findIndexFile(cacheDir)
+        if foundIndex:
+            indexPath = foundIndex
+            print(f"Auto-detected index file: {indexPath}")
             savePaths()
         else:
             # Use default even if it doesn't exist - user can set it in settings later

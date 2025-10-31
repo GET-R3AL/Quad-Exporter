@@ -1,8 +1,8 @@
 {
     "paths": {
-        "resPath": "C:\\EVE\\SharedCache\\ResFiles",
-        "indexPath": "C:\\EVE\\SharedCache\\tq\\resfileindex.txt",
-        "exportDest": "C:\\Users\\svenm\\Documents"
+        "resPath": "C:\\Program Files\\EVE\\SharedCache\\ResFiles",
+        "indexPath": "C:\\Program Files\\EVE\\SharedCache\\tq\\resfileindex.txt",
+        "exportDest": "C:\\Users\\Sven\\Documents"
     },
     "fileTypeVisibility": {
         ".gr2": true,

@@ -467,7 +467,7 @@ class SettingsWindow(tk.Toplevel):
         pathsFrame.pack(fill=tk.BOTH, expand=True)
         
         # SharedCache Root Path Section
-        sharedCacheLabel = ttk.Label(pathsFrame, text="EVE SharedCache Directory (select the 'SharedCache' folder):", font=("Arial", 10, "bold"))
+        sharedCacheLabel = ttk.Label(pathsFrame, text="EVE SharedCache Directory (you can find it in your launcher settings, it will have a ResFiles and tq folder in it):", font=("Arial", 10, "bold"))
         sharedCacheLabel.grid(column=0, row=0, sticky="W", pady=(0, 5))
 
         # Store the SharedCache root path instead of ResFiles path
@@ -730,17 +730,33 @@ class SettingsWindow(tk.Toplevel):
     
     def updatePathsFromSelection(self):
         """Update ResFiles and Index paths based on SharedCache path and server selection."""
+        from __init__ import findCacheDirectory, findIndexFile
+        
         sharedCachePath = self.sharedCachePathVar.get()
         server = self.serverVar.get()
         
         if sharedCachePath:
+            # Try to find a valid cache directory if user selected a parent folder
+            cacheDir = findCacheDirectory(sharedCachePath)
+            if cacheDir and cacheDir != sharedCachePath:
+                # User selected a parent folder, update to the actual cache folder
+                sharedCachePath = cacheDir
+                self.sharedCachePathVar.set(cacheDir)
+                print(f"Auto-detected cache directory: {cacheDir}")
+            
             # Update ResFiles path
             resFilesPath = os.path.join(sharedCachePath, "ResFiles")
             self.resPathVar.set(resFilesPath)
             
-            # Update Index path
-            indexPath = os.path.join(sharedCachePath, server, "resfileindex.txt")
-            self.indexPathVar.set(indexPath)
+            # Try to find index file automatically first
+            foundIndex = findIndexFile(sharedCachePath)
+            if foundIndex:
+                self.indexPathVar.set(foundIndex)
+                print(f"Auto-detected index file: {foundIndex}")
+            else:
+                # Fallback to selected server
+                indexPath = os.path.join(sharedCachePath, server, "resfileindex.txt")
+                self.indexPathVar.set(indexPath)
             
             # Validate paths and show status
             self.validatePaths()
@@ -805,5 +821,5 @@ class SettingsWindow(tk.Toplevel):
         savePreferences(self.preferences)
         
         # Call the callback for path updates (triggers reload if needed)
-        self.saveCallback(self.resPath, self.indexPath, self.root)
+        self.saveCallback(self.resPath, self.indexPath)
         self.destroy()

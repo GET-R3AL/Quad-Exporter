@@ -117,6 +117,20 @@ def openSettingsWindow(root: tk.Tk, activeTab: str = "Paths"):
     SettingsWindow(root, resPath, indexPath, saveCallback, activeTab=activeTab)
 
 
+def migratePreferences(preferences):
+    """Migrate old preference formats to current format.
+    Returns True if preferences were modified, False otherwise."""
+    modified = False
+    
+    # Remove "ALL FILES" from conversions if it exists
+    if "conversions" in preferences and "ALL FILES" in preferences["conversions"]:
+        del preferences["conversions"]["ALL FILES"]
+        print("Migrated preferences: Removed deprecated 'ALL FILES' setting")
+        modified = True
+    
+    return modified
+
+
 def loadPreferences():
     """Load preferences from the unified preferences.json file."""
     prefDir = getPreferenceDir()
@@ -125,7 +139,14 @@ def loadPreferences():
     if os.path.exists(preferencesPath):
         try:
             with open(preferencesPath, "r") as file:
-                return json.load(file)
+                preferences = json.load(file)
+                
+                # Migrate old preferences if needed
+                if migratePreferences(preferences):
+                    # Save migrated preferences
+                    savePreferences(preferences)
+                
+                return preferences
         except Exception as e:
             print(f"Error loading preferences: {e}")
             return None
@@ -264,10 +285,6 @@ def createDefaultPreferences(baseDir):
                     ".pickle": True, ".css": True, ".tri": True, ".mp4": True, ".mp3": True
                 },
                 "conversions": {
-                    "ALL FILES": {
-                        "Options": ["As Is", "Follow Individual Options", "Do Not Export"],
-                        "State": "As Is"
-                    },
                     ".gr2": {
                         "Options": ["As Is", ".obj", "Do Not Export"],
                         "State": "As Is"
@@ -445,8 +462,15 @@ def main():
     root.indexPath = indexPath
     root.savePathsCallback = savePathsFromSettings
 
-    # Create main horizontal PanedWindow using tk.PanedWindow for better compatibility
-    mainPane = tk.PanedWindow(root, orient=tk.HORIZONTAL, sashwidth=5, sashrelief=tk.RAISED)
+    # Create main vertical split (top for content, bottom for log)
+    mainVertPane = tk.PanedWindow(root, orient=tk.VERTICAL, sashwidth=5, sashrelief=tk.RAISED)
+    mainVertPane.pack(fill=tk.BOTH, expand=True)
+    
+    # Top frame for existing content
+    topFrame = tk.Frame(mainVertPane)
+    
+    # Create main horizontal PanedWindow for directory and preview
+    mainPane = tk.PanedWindow(topFrame, orient=tk.HORIZONTAL, sashwidth=5, sashrelief=tk.RAISED)
     mainPane.pack(fill=tk.BOTH, expand=True)
 
     # Directory Window (left pane)
@@ -468,6 +492,75 @@ def main():
     eW.pack(side=tk.BOTTOM, fill=tk.X, in_=rightFrame)
 
     mainPane.add(rightFrame, minsize=400)
+    
+    # Add top frame to vertical pane
+    mainVertPane.add(topFrame, minsize=400)
+    
+    # Log Window (bottom pane)
+    logW = LogWindow(root)
+    mainVertPane.add(logW, minsize=100, height=150)
+    root.logWindow = logW  # Store reference for logging
+    
+    # Redirect print statements to log window
+    import sys
+
+    # Preserve the original streams so the redirector always has a valid
+    # terminal to write to. This prevents AttributeError when sys.stdout has
+    # already been replaced or becomes None in certain contexts.
+    _ORIG_STDOUT = sys.stdout
+    _ORIG_STDERR = sys.stderr
+
+    class LogRedirector:
+        def __init__(self, log_window, terminal):
+            self.log_window = log_window
+            # terminal should be a stream-like object with write/flush
+            self.terminal = terminal
+
+        def write(self, message):
+            try:
+                # Safely write to terminal if available
+                if self.terminal is not None and hasattr(self.terminal, 'write'):
+                    try:
+                        self.terminal.write(message)
+                        if hasattr(self.terminal, 'flush'):
+                            self.terminal.flush()
+                    except Exception:
+                        # Don't let terminal write errors break logging to UI
+                        pass
+
+                # Write to log window (filter out empty lines)
+                if message and message.strip():
+                    # Determine tag based on message content
+                    tag = "info"
+                    low = message.lower()
+                    if "warning" in low or "warn" in low:
+                        tag = "warning"
+                    elif "error" in low or "failed" in low:
+                        tag = "error"
+                    elif "loaded" in low or "found" in low or "success" in low:
+                        tag = "success"
+                    try:
+                        self.log_window.log(message.strip(), tag)
+                    except Exception:
+                        # If the log window is not available or fails, ignore
+                        pass
+            except Exception:
+                # Keep logging resilient: never raise from write
+                pass
+
+        def flush(self):
+            try:
+                if self.terminal is not None and hasattr(self.terminal, 'flush'):
+                    self.terminal.flush()
+            except Exception:
+                pass
+
+    # Instantiate redirectors with the original streams
+    sys.stdout = LogRedirector(logW, _ORIG_STDOUT)
+    sys.stderr = LogRedirector(logW, _ORIG_STDERR)
+    
+    # Welcome message
+    logW.log("Quad-Exporter initialized", "success")
 
     # Menu Commands.
     top = root.winfo_toplevel()

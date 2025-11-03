@@ -2,7 +2,7 @@
     "paths": {
         "resPath": "C:\\Program Files\\EVE\\SharedCache\\ResFiles",
         "indexPath": "C:\\Program Files\\EVE\\SharedCache\\tq\\resfileindex.txt",
-        "exportDest": "C:\\Users\\Sven\\Documents"
+        "exportDest": "D:/"
     },
     "fileTypeVisibility": {
         ".gr2": true,
@@ -32,21 +32,13 @@
         ".mp3": true
     },
     "conversions": {
-        "ALL FILES": {
-            "Options": [
-                "As Is",
-                "Follow Individual Options",
-                "Do Not Export"
-            ],
-            "State": "As Is"
-        },
         ".gr2": {
             "Options": [
                 "As Is",
                 ".obj",
                 "Do Not Export"
             ],
-            "State": "As Is"
+            "State": ".obj"
         },
         ".black": {
             "Options": [
@@ -111,7 +103,7 @@
                 ".mp3",
                 "Do Not Export"
             ],
-            "State": "As Is"
+            "State": ".wav"
         },
         ".jpg": {
             "Options": [
@@ -128,7 +120,7 @@
                 ".jpg",
                 "Do Not Export"
             ],
-            "State": "As Is"
+            "State": ".png"
         },
         ".png": {
             "Options": [

@@ -9,10 +9,11 @@ from collections import defaultdict
 import json
 from convert import convert
 import platform
+import threading
 
 # All extensions - matches conversions.json
-extensions = ("ALL FILES", ".gr2", ".black", ".static", ".fsdbinary", ".json", ".xml", ".yaml", ".prs", ".bnk", ".wem", ".jpg", ".dds", ".png", ".webm", ".txt", ".py", ".gsf", ".srt", ".pathdata", ".region", ".pickle", ".css", ".tri", ".mp4", ".mp3")
-icons = ("files", "box", "file-digit", "file-digit", "file-digit", "file-code", "file-code", "file-code", "file-input", "music", "music", "image", "image", "image", "youtube", "file-text", "file-code", "file-code", "message-circle", "map", "map", "file-digit", "file-code", "box", "youtube", "music")
+extensions = (".gr2", ".black", ".static", ".fsdbinary", ".json", ".xml", ".yaml", ".prs", ".bnk", ".wem", ".jpg", ".dds", ".png", ".webm", ".txt", ".py", ".gsf", ".srt", ".pathdata", ".region", ".pickle", ".css", ".tri", ".mp4", ".mp3")
+icons = ("box", "file-digit", "file-digit", "file-digit", "file-code", "file-code", "file-code", "file-input", "music", "music", "image", "image", "image", "youtube", "file-text", "file-code", "file-code", "message-circle", "map", "map", "file-digit", "file-code", "box", "youtube", "music")
 
 
 def CreateToolTip(widget, text):
@@ -56,10 +57,57 @@ class ToolTip():
             tw.destroy()
 
 
+class LogWindow(tk.Frame):
+    """A log window that displays messages and terminal output."""
+    def __init__(self, root: tk.Tk, **kwargs):
+        super(LogWindow, self).__init__(**kwargs)
+        self.root = root
+        
+        # Create label
+        label = ttk.Label(self, text="Log:", font=("Arial", 9, "bold"))
+        label.pack(side=tk.TOP, anchor=tk.W, padx=5, pady=(5, 0))
+        
+        # Create scrolled text widget
+        self.logText = scrolledtext.ScrolledText(
+            self,
+            wrap=tk.WORD,
+            height=8,
+            font=("Consolas", 9),
+            bg="#1e1e1e",
+            fg="#d4d4d4",
+            insertbackground="#d4d4d4"
+        )
+        self.logText.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Make it read-only
+        self.logText.config(state=tk.DISABLED)
+        
+        # Configure tags for different message types
+        self.logText.tag_config("info", foreground="#4ec9b0")
+        self.logText.tag_config("warning", foreground="#dcdcaa")
+        self.logText.tag_config("error", foreground="#f48771")
+        self.logText.tag_config("success", foreground="#b5cea8")
+    
+    def log(self, message, tag="info"):
+        """Add a message to the log."""
+        self.logText.config(state=tk.NORMAL)
+        self.logText.insert(tk.END, message + "\n", tag)
+        self.logText.see(tk.END)  # Auto-scroll to bottom
+        self.logText.config(state=tk.DISABLED)
+    
+    def clear(self):
+        """Clear the log."""
+        self.logText.config(state=tk.NORMAL)
+        self.logText.delete(1.0, tk.END)
+        self.logText.config(state=tk.DISABLED)
+
+
 class ExportWindow(tk.Frame):
     def __init__(self, root: tk.Tk, **kwargs):
         super(ExportWindow, self).__init__(**kwargs)
         self.root = root
+        # Store reference to this window in root for stats tracking
+        root.exportWindow = self
         # Don't use pack_propagate(False) so the frame can size itself to content
         
         # Load Settings from unified preferences
@@ -149,13 +197,28 @@ class ExportWindow(tk.Frame):
             self.exportDestination = output_directory
             self._saveExportDestination(output_directory)
     
+    def reloadConversionSettings(self):
+        """Reload conversion settings from preferences file."""
+        from __init__ import loadPreferences
+        self.preferences = loadPreferences()
+        if self.preferences:
+            self.conversionSettings = self.preferences.get("conversions", {})
+            print("Reloaded conversion settings")
+        else:
+            self.conversionSettings = {}
+    
     def openExportSettings(self):
         """Open settings window with Conversions tab active."""
         # Call the settings window with tab parameter
-        SettingsWindow(self.root, self.root.resPath, self.root.indexPath, 
+        # After closing, reload settings
+        settingsWindow = SettingsWindow(self.root, self.root.resPath, self.root.indexPath, 
                       self.root.savePathsCallback, activeTab="Conversions")
+        # Reload settings when the window is closed
+        self.root.wait_window(settingsWindow)
+        self.reloadConversionSettings()
 
     def export(self):
+        """Start export in a background thread."""
         # Get destination from entry field
         output_directory = self.destEntry.get().strip()
         
@@ -167,25 +230,123 @@ class ExportWindow(tk.Frame):
             warn(self.root, "Export destination does not exist. Please select a valid directory.")
             return
         
+        # Check if already exporting
+        if hasattr(self, '_export_thread') and self._export_thread.is_alive():
+            warn(self.root, "Export already in progress. Please wait for it to complete.")
+            return
+        
         # Update saved destination
         self.exportDestination = output_directory
         self._saveExportDestination(output_directory)
         
-        # Go through all of the selected items.
-        for item in self.root.selected:
-            if isinstance(item, FileItem):
-                # Add the file.
-                self.exportFile(item, output_directory)
-            else:
-                self.exportFolder(item, output_directory)
-
-    def exportFile(self, item, output_directory):
-        full_item_path = os.path.join(output_directory, item.path)
-        # Call our convert.py function to handle file conversion.
-        convert(item.truePath, full_item_path, self.conversionSettings, self.root)
-
-    def exportFolder(self, item, output_directory):
-        # Get export options from checkboxes
+        # Disable export button and change text
+        self.exportBtn.config(state=tk.DISABLED, text="Exporting...")
+        
+        # Run export in a separate thread
+        self._export_thread = threading.Thread(
+            target=self._doExport,
+            args=(output_directory,),
+            daemon=True
+        )
+        self._export_thread.start()
+        
+        # Check thread status periodically
+        self._checkExportThread()
+    
+    def _checkExportThread(self):
+        """Check if export thread is still running and update UI accordingly."""
+        if hasattr(self, '_export_thread') and self._export_thread.is_alive():
+            # Still running, check again in 100ms
+            self.root.after(100, self._checkExportThread)
+        else:
+            # Export finished, re-enable button
+            self.exportBtn.config(state=tk.NORMAL, text="Export Selected")
+    
+    def _doExport(self, output_directory):
+        """The actual export logic that runs in a background thread with parallel processing."""
+        try:
+            import concurrent.futures
+            from threading import Lock
+            
+            # Reload conversion settings to ensure we have the latest
+            self.reloadConversionSettings()
+            
+            # Initialize export tracking with thread-safe lock
+            self.exportStats = {
+                'total_files': 0,
+                'exported_files': 0,
+                'warnings': 0,
+                'errors': 0,
+                'current_folder': None,
+                'lock': Lock()
+            }
+            
+            # Count total files first and collect all file items (deduplicated)
+            print("Preparing export...")
+            files_to_export = []
+            seen_files = set()  # Track files to avoid duplicates
+            
+            for item in self.root.selected:
+                if isinstance(item, FileItem):
+                    # Use truePath as unique identifier
+                    if item.truePath not in seen_files:
+                        seen_files.add(item.truePath)
+                        files_to_export.append((item, output_directory))
+                else:
+                    # Collect files from folder (already deduplicates internally)
+                    folder_files = self._collectFilesFromFolder(item, output_directory, seen_files)
+                    files_to_export.extend(folder_files)
+            
+            self.exportStats['total_files'] = len(files_to_export)
+            
+            if self.exportStats['total_files'] == 0:
+                print("No files to export.")
+                return
+            
+            print(f"Starting export: {self.exportStats['total_files']} file(s) to '{output_directory}'")
+            
+            # Aggressive threading: Use more workers for I/O-bound tasks
+            # CPU count * 4 for I/O operations, max 32 threads
+            import os as os_module
+            max_workers = min(32, (os_module.cpu_count() or 4) * 4)
+            print(f"Using {max_workers} worker threads for parallel export")
+            
+            # Export files in parallel using ThreadPoolExecutor
+            with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit all tasks at once (map is more efficient than submit loop)
+                futures = [executor.submit(self._exportFileThreadSafe, item, output_dir) 
+                          for item, output_dir in files_to_export]
+                
+                # Process completed tasks as they finish
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        future.result()  # Get result to catch any exceptions
+                    except Exception as e:
+                        print(f"Error exporting file: {e}")
+                        with self.exportStats['lock']:
+                            self.exportStats['errors'] += 1
+            
+            # Print export summary
+            print("=" * 60)
+            print(f"Export Complete!")
+            print(f"  Files exported: {self.exportStats['exported_files']}/{self.exportStats['total_files']}")
+            if self.exportStats['warnings'] > 0:
+                print(f"  Warnings: {self.exportStats['warnings']}")
+            if self.exportStats['errors'] > 0:
+                print(f"  Errors: {self.exportStats['errors']}")
+            print(f"  Destination: {output_directory}")
+            print("=" * 60)
+            
+        except Exception as e:
+            # Catch any unhandled exceptions and log them
+            print(f"Error during export: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def _collectFilesFromFolder(self, item, output_directory, seen_files):
+        """Collect all files from a folder recursively for parallel processing.
+        Uses seen_files set to prevent duplicate exports."""
+        files_to_export = []
         keep_hierarchy = self.keepHierarchy.get()
         export_files = self.exportFiles.get()
         export_subdirs = self.exportSubdirs.get()
@@ -195,15 +356,37 @@ class ExportWindow(tk.Frame):
         def recurse(folder: FileDir):
             if export_files:
                 for child in folder.files:
-                    rel_path = os.path.join(base_path, os.path.relpath(child.fullPath, item.fullPath))
-                    target_dir = os.path.join(output_directory, rel_path)
-                    self.exportFile(child, target_dir)
-
+                    # Only add file if we haven't seen it before (avoid duplicates)
+                    if child.truePath not in seen_files:
+                        seen_files.add(child.truePath)
+                        rel_path = os.path.join(base_path, os.path.relpath(child.fullPath, item.fullPath))
+                        target_dir = os.path.join(output_directory, rel_path)
+                        files_to_export.append((child, target_dir))
+            
             if export_subdirs:
                 for subdir in folder.children:
                     recurse(subdir)
-
+        
         recurse(item)
+        return files_to_export
+    
+    def _exportFileThreadSafe(self, item, output_directory):
+        """Thread-safe version of exportFile for parallel processing."""
+        full_item_path = os.path.join(output_directory, item.path)
+        
+        # Update progress counter (thread-safe)
+        with self.exportStats['lock']:
+            self.exportStats['exported_files'] += 1
+            current = self.exportStats['exported_files']
+            total = self.exportStats['total_files']
+            
+            # Print progress every 10 files or for first/last file
+            if current == 1 or current == total or current % 10 == 0:
+                progress_pct = int((current / total) * 100)
+                print(f"[{current}/{total} - {progress_pct}%] Exporting: {item.path}")
+        
+        # Call our convert.py function to handle file conversion
+        convert(item.truePath, full_item_path, self.conversionSettings, self.root)
 
 
 
@@ -640,21 +823,12 @@ class SettingsWindow(tk.Toplevel):
         self.convRadioVars = {}
         
         # Create radio buttons for each file type - one row per file type
-        # Put "ALL FILES" first, then sort the rest
         row = 0
         
-        # Sort items but keep "ALL FILES" at the top
+        # Sort items alphabetically
         sortedItems = sorted(self.conversionSettings.items())
-        orderedItems = []
         
-        # Find and add "ALL FILES" first
-        for item in sortedItems:
-            if item[0] == "ALL FILES":
-                orderedItems.insert(0, item)
-            else:
-                orderedItems.append(item)
-        
-        for fileType, settings in orderedItems:
+        for fileType, settings in sortedItems:
             # File type label
             fileLabel = ttk.Label(self.convScrollFrame, text=fileType, font=("Arial", 9, "bold"))
             fileLabel.grid(column=0, row=row, sticky="W", pady=2, padx=(5, 15))

@@ -7,6 +7,33 @@ App/pref/savedPaths.txt
 Temp
 # You'll have to build your own pycache, sorry!
 __pycache__
-# This is so I can build the app binary.
+*.pyc
+*.pyo
+*.pyd
+
+# PyInstaller build process
 QuadExporter.spec
 Exports/
+dist/
+build/
+App/build/
+App/dist/
+*.exe
+*.manifest
+*.toc
+*.pyz
+*.pkg
+warn-*.txt
+xref-*.html
+localpycs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~

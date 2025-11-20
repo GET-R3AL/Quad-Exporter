@@ -128,6 +128,12 @@ def migratePreferences(preferences):
         print("Migrated preferences: Removed deprecated 'ALL FILES' setting")
         modified = True
     
+    # Add deduplicateOBJ preference if it doesn't exist (default to True)
+    if "deduplicateOBJ" not in preferences:
+        preferences["deduplicateOBJ"] = True
+        print("Migrated preferences: Added 'deduplicateOBJ' setting (enabled by default)")
+        modified = True
+    
     return modified
 
 
@@ -276,6 +282,7 @@ def createDefaultPreferences(baseDir):
                     "indexPath": "",
                     "exportDest": defaultExportPath
                 },
+                "deduplicateOBJ": True,
                 "fileTypeVisibility": {
                     ".gr2": True, ".black": True, ".static": True, ".fsdbinary": True,
                     ".json": True, ".xml": True, ".yaml": True, ".prs": True,

@@ -5,6 +5,107 @@ import tkinter as tk
 from QEHelper import warn
 import subprocess
 
+def _deduplicate_obj(obj_path):
+    """
+    Remove duplicate submesh groups from an OBJ file in-place.
+    
+    EVE's .gr2 files often export with duplicate submeshes (LOD, collision meshes, etc.)
+    This function keeps only the first occurrence of each named group.
+    
+    Optimized for performance:
+    - Single pass through file
+    - Minimal string operations
+    - Buffered I/O
+    - Fast set lookups
+    
+    Args:
+        obj_path: Path to .obj file to deduplicate
+    
+    Returns:
+        tuple: (groups_removed, vertices_removed, faces_removed)
+    """
+    try:
+        seen_groups = set()
+        skip_current_group = False
+        
+        # Statistics (only track what we need for reporting)
+        groups_removed = 0
+        vertices_removed = 0
+        faces_removed = 0
+        
+        # Use temp file for streaming write (faster than building list in memory)
+        temp_path = obj_path + '.tmp'
+        
+        with open(obj_path, 'r', encoding='utf-8', buffering=65536) as f_in, \
+             open(temp_path, 'w', encoding='utf-8', buffering=65536) as f_out:
+            
+            for line in f_in:
+                # Fast path: most lines start with these common prefixes
+                first_char = line[0] if line else ''
+                
+                if first_char == 'g':
+                    # Group definition - check for duplicates
+                    if line.startswith('g '):
+                        group_name = line[2:].strip()
+                        
+                        if group_name in seen_groups:
+                            # Duplicate - skip this group
+                            skip_current_group = True
+                            groups_removed += 1
+                        else:
+                            # First occurrence - keep it
+                            seen_groups.add(group_name)
+                            skip_current_group = False
+                            f_out.write(line)
+                    else:
+                        # Not a group line starting with 'g'
+                        if not skip_current_group:
+                            f_out.write(line)
+                
+                elif first_char == 'v':
+                    # Vertex data (v, vn, vt)
+                    if skip_current_group:
+                        if line.startswith('v '):
+                            vertices_removed += 1
+                    else:
+                        f_out.write(line)
+                
+                elif first_char == 'f':
+                    # Face data
+                    if skip_current_group:
+                        if line.startswith('f '):
+                            faces_removed += 1
+                    else:
+                        f_out.write(line)
+                
+                elif first_char in ('#', '\n', '\r', 's', 'u', 'm', 'o'):
+                    # Comments, empty lines, smoothing, materials, objects
+                    # Always keep comments and empty lines
+                    if first_char in ('#', '\n', '\r'):
+                        f_out.write(line)
+                    elif not skip_current_group:
+                        f_out.write(line)
+                
+                else:
+                    # Any other line type
+                    if not skip_current_group:
+                        f_out.write(line)
+        
+        # Atomic replace: remove original and rename temp
+        os.replace(temp_path, obj_path)
+        
+        return (groups_removed, vertices_removed, faces_removed)
+        
+    except Exception as e:
+        # Clean up temp file if it exists
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except:
+                pass
+        print(f"Warning: Could not deduplicate OBJ file {obj_path}: {e}")
+        return (0, 0, 0)
+
 def _log_warning(message, root):
     """Log a warning and update stats if available."""
     print(f"Warning: {message}")
@@ -57,6 +158,21 @@ def convert(truePath: str, fullItemPath: str, settings: dict, root: tk.Tk):
             tamberToolPath = os.path.join(os.path.dirname(os.path.realpath(__file__)), "TamberTool", "evegr2toobj.exe")
             try:
                 subprocess.run([tamberToolPath, truePath, fullItemPath], shell=True, capture_output=True)
+                
+                # Check if OBJ deduplication is enabled in preferences
+                deduplicate_obj = False
+                try:
+                    if hasattr(root, 'preferences') and root.preferences:
+                        deduplicate_obj = root.preferences.get("deduplicateOBJ", True)
+                except:
+                    deduplicate_obj = True  # Default to enabled if preference not found
+                
+                # Deduplicate the OBJ file if enabled
+                if deduplicate_obj and os.path.exists(fullItemPath):
+                    groups_removed, vertices_removed, faces_removed = _deduplicate_obj(fullItemPath)
+                    if groups_removed > 0:
+                        print(f"  Deduplicated OBJ: removed {groups_removed} duplicate groups, {vertices_removed:,} vertices, {faces_removed:,} faces")
+                
                 return 1
             except Exception as e:
                 _log_error(f"Issue with Tamber Tool: {e}", root)
